@@ -1,0 +1,23 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Universal Gameplay Framework"
+config/features=PackedStringArray("4.7")
+
+[autoload]
+
+FrameworkCore="*uid://djr0pwjjmfgvl"
+EventBus="*uid://bl8kgnmqlcn1t"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/universal_gameplay/plugin.cfg")

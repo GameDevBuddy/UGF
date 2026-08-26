@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="FrameworkSettings" format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/core/framework_settings.gd" id="1_770bl"]
+
+[resource]
+script = ExtResource("1_770bl")
+definition_paths = Array[String](["res://tests/content"])
+enabled_modules = Dictionary[StringName, bool]({
+&"module.inventory": true
+})

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://tests/support/sample_definition.gd" id="1_r5c2f"]
+
+[resource]
+script = ExtResource("1_r5c2f")
+power = 5.0
+id = &"content.sword"
+display_name = "Iron Sword"
+tags = Array[StringName]([&"item.weapon"])
