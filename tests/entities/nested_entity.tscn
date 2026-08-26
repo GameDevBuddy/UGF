@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/definition_binder.gd" id="1_hcy8k"]
+[ext_resource type="Script" path="res://tests/support/sample_component.gd" id="2_kv111"]
+
+[node name="OuterEntity" type="Node3D" unique_id=896412252]
+
+[node name="DefinitionBinder" type="Node" parent="." unique_id=1134624600]
+script = ExtResource("1_hcy8k")
+bind_on_ready = false
+
+[node name="OuterComponent" type="Node" parent="." unique_id=171768123]
+script = ExtResource("2_kv111")
+
+[node name="InnerEntity" type="Node3D" parent="." unique_id=1863316696]
+
+[node name="DefinitionBinder" type="Node" parent="InnerEntity" unique_id=297818386]
+script = ExtResource("1_hcy8k")
+bind_on_ready = false
+
+[node name="InnerComponent" type="Node" parent="InnerEntity" unique_id=1895673913]
+script = ExtResource("2_kv111")

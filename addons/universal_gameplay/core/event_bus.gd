@@ -37,9 +37,11 @@ signal actor_died(event)
 # NOTE: the two signals above deliberately leave their parameter untyped, and
 # it is the one place this framework departs from rule 27.
 #
-# An object-typed signal parameter on an autoload script keeps that parameter's
-# GDScript alive past the engine's resource sweep, and Godot 4.7.2 reports it
-# on every exit:
+# The restriction is specific to autoloads. An object-typed signal parameter on
+# an ordinary Node is fine and is used freely elsewhere -- verified against
+# Godot 4.7.2 by creating and freeing such nodes in a loop, with no leak. Only
+# on an autoload script does the parameter's GDScript survive the engine's
+# resource sweep, and then Godot reports it on every exit:
 #
 #     WARNING: 3 ObjectDB instances were leaked at exit
 #     ERROR: 2 resources still in use at exit

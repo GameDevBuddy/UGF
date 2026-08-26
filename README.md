@@ -9,9 +9,10 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 — Foundation Contract ✅
+## Status: M0 + M1 complete ✅
 
-M0 locks the architecture before any gameplay system is written. It is complete and green.
+M0 locks the architecture before any gameplay system is written. M1 builds the universal
+runtime entity on top of it. Both are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -23,14 +24,33 @@ M0 locks the architecture before any gameplay system is written. It is complete 
 | Validation issue type | `core/contracts/validation_issue.gd`, `validation_result.gd` |
 | Test harness | `tests/` |
 
-**Exit gate — both halves proven by test, not assertion:**
+**M0 exit gate — proven by test, not assertion:**
 
 - *Framework loads with zero game content* — `test_framework_core.gd::test_framework_loads_with_zero_game_content`
 - *A sample module can register and unregister* — `test_framework_core.gd::test_sample_module_registers_and_unregisters`
 - *No sibling dependency* — `test_module_registry.gd::test_removing_one_module_leaves_unrelated_modules_working`
 
+### M1 — Entity + Save Identity ✅
+
+| M1 deliverable | Where |
+| --- | --- |
+| DefinitionBinder | `entity/definition_binder.gd` |
+| PersistentIdentity | `entity/persistent_identity.gd` |
+| SemanticState | `entity/semantic_state.gd` |
+| FrameworkComponent base | `entity/framework_component.gd` |
+| Capture / restore state | `entity/entity_serializer.gd`, `entity_record.gd` |
+| Entity debug inspector | `debug/entity_inspector.gd` |
+| Spawn + rebuild from record | `entity/entity_factory.gd` |
+| EntityDefinition | `definitions/entity_definition.gd` |
+
+**M1 exit gate:**
+
+- *An entity can bind a definition* — `test_definition_binder.gd::test_entity_binds_a_definition`
+- *Capabilities are configured from data, not subclassed* — `..::test_capabilities_are_configured_from_definition_data`
+- *Entity state round-trips* — `test_entity_persistence.gd::test_entity_state_round_trips`
+
 ```
-9 suite(s), 142 test(s), 142 passed, 0 failed, 294 assertions
+14 suite(s), 228 test(s), 228 passed, 0 failed, 453 assertions
 RESULT: PASS
 ```
 
@@ -62,7 +82,7 @@ addon installed before they run is one most contributors will never run.
 ```
 Layer 0  Core contracts      registry / settings / events / results     addons/universal_gameplay/core/
 Layer 1  Definitions         "what is it?"           Resource          core/contracts/
-Layer 2  Entity scenes       "what exists?"          PackedScene       (M1+)
+Layer 2  Entity scenes       "what exists?"          PackedScene       entity/definition_binder.gd
 Layer 3  Capabilities        "what can it do?"       child Node        entity/framework_component.gd
 Layer 4  Feature modules     "how does it work?"     module folder     (M2+)
 Layer 5  Services            "what persists?"        registered Object core/registry/
@@ -142,8 +162,13 @@ ERROR: 2 resources still in use at exit
 ```
 
 Verified by bisection against Godot 4.7.2: untyping the parameter removes it, and removing the
-static calls does not. Builtin-typed parameters are unaffected, which is why `FrameworkCore`'s
-own `module_registered(id: StringName)` stays typed.
+static calls does not.
+
+**The restriction is autoload-specific.** Object-typed signal parameters on ordinary Nodes are
+clean — verified by creating and freeing such nodes in a loop — so capability components keep
+their typed signals and rule 27 holds everywhere except these two lines. Builtin-typed
+parameters are unaffected either way, which is why `FrameworkCore`'s own
+`module_registered(id: StringName)` stays typed.
 
 The bus keeps its parameter types in the docstring and enforces the real invariant where it can
 be enforced — `publish()` takes a typed `FrameworkEvent` and is the only route to those signals.
@@ -152,6 +177,13 @@ GDScript does not check signal handler signatures at connect time anyway.
 **Related:** `Node._ready()` does not run until the first process frame, so an autoload is
 reachable before its `_ready()` has. `FrameworkCore` therefore wires itself lazily on first use
 rather than in `_ready()`, and `test_core_is_usable_before_ready_runs` pins that behaviour.
+`PersistentIdentity` generates its id lazily for the same reason — an entity spawned and
+serialised inside one frame would otherwise have no id.
+
+**Also:** `Node3D.global_transform` is only legal inside the tree. `EntitySerializer` falls back
+to the local transform when an entity is captured before it is parented, rather than erroring
+and silently recording identity. The test harness yields one frame before running so its nodes
+are genuinely in-tree — without that, nothing spatial or lifecycle-dependent is testable at all.
 
 ---
 
@@ -169,7 +201,18 @@ addons/universal_gameplay/
 │   ├── contexts/                  EntityContext, DamageContext, FrameworkResult
 │   ├── events/                    FrameworkEvent + Core payloads
 │   └── registry/                  definitions, services, modules
-├── entity/framework_component.gd  capability base class
+├── definitions/
+│   └── entity_definition.gd       a definition with a scene, so it can be spawned
+├── entity/
+│   ├── framework_component.gd     capability base: initialise, capture, restore
+│   ├── definition_binder.gd       the composition seam. marks an entity root
+│   ├── persistent_identity.gd     save identity that outlives the scene
+│   ├── semantic_state.gd          runtime state tags
+│   ├── entity_record.gd           what one entity writes to a save
+│   ├── entity_serializer.gd       capture / restore across an entity
+│   ├── entity_factory.gd          spawn from definition, rebuild from record
+│   └── entity_module.gd           the Entity module manifest
+├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
 
@@ -179,7 +222,8 @@ tests/
 ├── run_tests.gd                   headless entry point
 ├── cases/                         the suites
 ├── support/                       fixtures
-└── content/                       sample .tres for content-loading tests
+├── content/                       sample .tres for content-loading tests
+└── entities/                      sample entity scenes and definitions
 ```
 
 Game content lives outside the addon entirely, in `res://game/`. The framework knows
@@ -194,7 +238,7 @@ M0 is done. The build order follows dependency, not feature appeal.
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | M10 | Factions + reputation |
-| M1 | Entity + save identity | | M11 | Commerce + vendors + loot |
+| **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
 | M2 | Character + input + locomotion | | M12 | Crafting + survival |
 | M3 | Stats + health + damage + effects | | M13 | Vehicles |
 | M4 | Items + inventory + equipment | | M14 | Spawn + world state + traffic |

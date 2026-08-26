@@ -61,12 +61,11 @@ func add_test_node(node: Node) -> Node:
 ## Core and the EventBus can be built fresh per test instead of tests sharing
 ## one global whose state bleeds between them.
 ##
-## [b]Note:[/b] the runner executes inside [method SceneTree._initialize], and
-## Godot defers [method Node._ready] to the first process frame -- so the
-## returned node's _ready() has [i]not[/i] run and will not run during the
-## test. That is deliberate. Framework code must not depend on _ready() for
-## wiring anything a caller can reach, and testing it in this state is how
-## that stays true.
+## The runner yields a frame before the first test, so the tree is live and the
+## returned node's [method Node._ready] has run, exactly as it would in a game.
+## To test a node whose _ready() has [i]not[/i] run -- framework code must not
+## depend on _ready() for wiring a caller can reach -- construct it directly
+## and leave it out of the tree.
 func make_autoload(script_path: String, node_name: String = "") -> Node:
 	var script: GDScript = load(script_path)
 	var node: Node = script.new()

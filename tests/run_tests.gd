@@ -10,7 +10,7 @@ const TEST_DIRECTORY: String = "res://tests/cases"
 
 func _initialize() -> void:
 	var runner := FrameworkTestRunner.new(self)
-	runner.run_directory(TEST_DIRECTORY)
+	await runner.run_directory(TEST_DIRECTORY)
 	runner.print_report()
 	var success := runner.is_successful()
 	runner.cleanup()

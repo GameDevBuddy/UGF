@@ -57,8 +57,8 @@ func test_core_is_usable_before_ready_runs() -> void:
 	# reachable before its _ready() has run. Core must be fully wired on first
 	# use, not one frame later -- this test runs entirely within _initialize(),
 	# so _ready() has definitively not fired yet.
+	# Deliberately not added to the tree, so _ready() has definitively not run.
 	var fresh: Node = load(CORE_SCRIPT).new()
-	add_test_node(fresh)
 
 	var seen: Array[StringName] = []
 	fresh.module_registered.connect(func(id: StringName) -> void: seen.append(id))
@@ -66,6 +66,7 @@ func test_core_is_usable_before_ready_runs() -> void:
 	assert_ok(fresh.register_module(_module(&"module.early")))
 	assert_true(fresh.has_feature(&"module.early"))
 	assert_eq(seen, [&"module.early"] as Array[StringName], "The relay was wired on first use")
+	fresh.free()
 
 
 func test_not_bootstrapped_until_asked() -> void:

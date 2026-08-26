@@ -34,7 +34,13 @@ func _init(tree: SceneTree) -> void:
 
 
 ## Runs every [code]test_*.gd[/code] under [param directory], recursively.
+##
+## Yields one frame first. Nodes added during [method SceneTree._initialize]
+## are not actually inside the tree yet: is_inside_tree() is false, _ready()
+## has not run, and anything spatial silently misbehaves. One frame makes the
+## tree live, after which add_child() behaves exactly as it does in a game.
 func run_directory(directory: String) -> void:
+	await _tree.process_frame
 	var paths := _find_test_scripts(directory)
 	paths.sort()
 	for path in paths:

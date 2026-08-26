@@ -1,0 +1,21 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/definition_binder.gd" id="1_flbcj"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/persistent_identity.gd" id="2_mnvgd"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/semantic_state.gd" id="3_5ugf5"]
+[ext_resource type="Script" path="res://tests/support/sample_component.gd" id="4_r5cdv"]
+
+[node name="TestEntity" type="Node3D" unique_id=629852203]
+
+[node name="DefinitionBinder" type="Node" parent="." unique_id=1821501119]
+script = ExtResource("1_flbcj")
+bind_on_ready = false
+
+[node name="PersistentIdentity" type="Node" parent="." unique_id=1308652904]
+script = ExtResource("2_mnvgd")
+
+[node name="SemanticState" type="Node" parent="." unique_id=1272558087]
+script = ExtResource("3_5ugf5")
+
+[node name="SampleComponent" type="Node" parent="." unique_id=1101966161]
+script = ExtResource("4_r5cdv")

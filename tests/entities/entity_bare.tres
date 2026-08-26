@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EntityDefinition" format=3]
+
+[ext_resource type="PackedScene" path="res://tests/entities/bare_entity.tscn" id="1_4u20c"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/definitions/entity_definition.gd" id="2_j2tbt"]
+
+[resource]
+script = ExtResource("2_j2tbt")
+scene = ExtResource("1_4u20c")
+id = &"entity.bare"
+display_name = "Bare Entity"

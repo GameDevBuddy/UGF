@@ -29,6 +29,12 @@ extends Node
 ## Emitted once [method initialize] has run and the component is usable.
 signal initialized
 
+## Fixes this component's save key independently of its node name. Leave
+## blank to key off the name. Two components on one entity must not share a
+## key -- [EntitySerializer] reports it rather than letting one silently
+## overwrite the other.
+@export var state_key_override: StringName = &""
+
 var _context: EntityContext = null
 var _initialized: bool = false
 
@@ -87,3 +93,16 @@ func restore_state(_data: Dictionary) -> void:
 ## purely behavioural component is not asked to serialise nothing.
 func is_persistent() -> bool:
 	return false
+
+
+## Key this component's state is filed under inside an entity record.
+##
+## Defaults to the node's name, which makes authored entities readable in a
+## save file. The consequence is that [b]renaming a component node invalidates
+## existing saves[/b] for that component -- it restores to its defaults rather
+## than erroring. Set [member state_key_override] on any component whose node
+## name might reasonably change later, and the key stops depending on it.
+func get_state_key() -> StringName:
+	if state_key_override != &"":
+		return state_key_override
+	return StringName(name)
