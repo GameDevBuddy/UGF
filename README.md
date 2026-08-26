@@ -256,7 +256,9 @@ architecture is wrong and gets fixed before more systems land.
 
 ## The rules that actually bite
 
-The full rulebooks live in the source documents. These are the ones that change what you type:
+The full rulebooks live in [`docs/`](docs/) — the [Implementation Plan](docs/implementation-plan.md)
+and the [Ontology Rulebook](docs/ontology-rulebook.md), with the original `.docx` kept in
+[`docs/source/`](docs/source/). These are the ones that change what you type:
 
 1. **Core is infrastructure.** It owns lifecycle, config, registries and contracts. Never
    `apply_damage()`, `buy_item()` or `complete_quest()`.
