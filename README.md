@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M16 complete ✅
+## Status: M0 – M17 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -19,7 +19,7 @@ without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
 an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills it with
 people without making it slow. M15 gives it a law. M16 makes all of it
-survive being switched off. All seventeen are green.
+survive being switched off. M17 lets you see any of it. All eighteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -581,6 +581,66 @@ deserialising six worlds.
 
 ---
 
+### M17 — UI Framework + Debug Tooling ✅
+
+| M17 deliverable | Where |
+| --- | --- |
+| Presenters / view models | `ui/presenter.gd`, `view_model.gd` |
+| HUD shell | `ui/hud_presenter.gd`, `hud_view_model.gd` |
+| Inventory / dialogue / mission panels | `ui/inventory_presenter.gd`, `dialogue_presenter.gd`, `mission_presenter.gd` |
+| Vitals panel | `ui/vitals_presenter.gd` — health, needs and effects in one snapshot |
+| Event monitor | `debug/event_monitor.gd` |
+| Entity inspector | `debug/entity_inspector.gd` — from M1, unchanged |
+| Mission / faction / save / spawn inspectors | `debug/service_inspector.gd` |
+| Console | `debug/debug_console.gd`, `debug_command.gd` |
+
+**M17 exit gate:**
+
+- *UI contains no domain authority* — `test_ui_authority.gd::test_no_presenter_can_change_the_world`,
+  `test_a_view_model_holds_no_live_objects`
+- *Nothing depends on the view* — `test_ui_authority.gd::test_no_module_depends_on_the_ui_module`
+- *Event inspector operational* — `test_debug_tooling.gd::test_the_monitor_records_what_crosses_the_bus`
+- *Entity inspector operational* — `test_debug_tooling.gd::test_the_entity_inspector_reports_what_an_entity_is`
+
+```
+86 suite(s), 2163 test(s), 2163 passed, 0 failed, 7876 assertions
+RESULT: PASS
+```
+
+**Presenters and no widgets.** This is the milestone's one real decision and it is written up in the
+decisions section below. What a health bar looks like is a project's decision about its own game
+(rule 21, rule 29); what every project would otherwise write five slightly different times is the
+discipline — observe, snapshot, emit.
+
+That discipline is what makes the exit gate true rather than merely intended. A `ViewModel` carries
+numbers and strings, never components, so a widget handed one physically cannot mutate what it
+draws. The `InventoryViewModel` is the clearest case: it holds rows of plain data rather than
+`ItemInstance`s, because an instance is live state and a bag panel that can destroy items is
+exactly what rule 21 exists to prevent. A test reads every file in `ui/` and fails on any of thirty
+mutating calls — verified by adding a `heal()` to `VitalsPresenter` and watching the suite name the
+file.
+
+`HudPresenter` exists so a HUD redraws **once**. Five presenters emitting independently means a
+frame where health has updated and the mission tracker has not, and every project would otherwise
+coalesce them slightly differently.
+
+**The debug tooling asks generically.** The plan wants a mission inspector, a faction matrix, a
+save inspector and a spawn debugger — four panels over four modules, and four files would make
+`debug/` the one thing in the framework that cannot be deleted. `ServiceInspector` finds each
+service by the methods it has rather than by its type, so it names no module and a project's own
+service is described for free if it answers the same questions. A test asserts that too.
+
+`DebugConsole` ships four read-only commands and no cheats. Spawn-item, set-stat and start-mission
+would import five modules; a project registers its own, and the console knows only names and
+callables. Commands **declare** whether they mutate, which is what lets a release build keep the
+inspectors and drop the cheats.
+
+The faction matrix prints both directions of every relation rather than folding them, because
+relations are directional and a matrix that hid the asymmetry would hide exactly what somebody
+opened the panel to find.
+
+---
+
 ---
 
 ## Running the tests
@@ -705,6 +765,26 @@ is a semantic id in the store that already exists (rule 32) and needs no new cod
 
 The cost is that a project reading the plan literally will look for `world.set_region_flag()` and
 not find it. That is worth one line of documentation; a duplicated store is not.
+
+### 6. The UI module ships no widgets
+
+The plan lists "HUD shells; inventory/shop/dialogue/mission widgets" as M17 deliverables. This
+ships presenters and view models and not one `Control`.
+
+A health bar is a look, and a look is a project's decision about its own game (rule 21, rule 29).
+A framework that shipped one would ship the first thing every project deletes — and worse, a widget
+holding a live `HealthComponent` can call `kill()` on it, which is the exact failure the exit gate
+forbids. What every project *does* need, and would otherwise write five slightly different times,
+is the discipline: a presenter observes, builds a plain-data snapshot, and emits it; a widget draws
+the snapshot and holds nothing live.
+
+So the framework owns *when* a panel should redraw and *what* it needs to know, and a project owns
+what it looks like. The cost is that "inventory widget" is not a thing you can drop into a scene —
+you write the `Control` and connect it to `InventoryPresenter.view_changed`, which is perhaps
+twenty lines.
+
+This is the same call M8 made in deferring a dialogue presenter, now made deliberately rather than
+by omission: `DialoguePresenter` ships here, and still draws nothing.
 
 ---
 
@@ -1155,7 +1235,21 @@ addons/universal_gameplay/
 │   ├── autosave_policy.gd         when, how often, and how many to keep
 │   ├── save_service.gd            aggregates. serialises nothing itself
 │   └── persistence_module.gd      the module manifest
-├── debug/entity_inspector.gd      what is this entity, and would it persist?
+├── ui/
+│   ├── view_model.gd              a snapshot. plain data, never components
+│   ├── presenter.gd               observe, snapshot, emit. one-way by design
+│   ├── vitals_presenter.gd        health, needs and effects, taken together
+│   ├── inventory_presenter.gd     rows, not item instances
+│   ├── dialogue_presenter.gd      the window M8 deliberately deferred
+│   ├── mission_presenter.gd       the quest log
+│   ├── hud_presenter.gd           so a HUD redraws once, not five times
+│   └── ui_module.gd               the module manifest
+├── debug/
+│   ├── entity_inspector.gd        what is this entity, and would it persist?
+│   ├── service_inspector.gd       missions, factions, saves, spawns. names none
+│   ├── event_monitor.gd           a ring buffer of everything on the bus
+│   ├── debug_command.gd           one command. declares whether it mutates
+│   └── debug_console.gd           four read-only commands and no cheats
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
 
@@ -1176,7 +1270,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M16 are done. The build order follows dependency, not feature appeal.
+M0 through M17 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -1187,7 +1281,7 @@ M0 through M16 are done. The build order follows dependency, not feature appeal.
 | **M4** | **Items + inventory + equipment** ✅ | | **M14** | **Spawn + world state + traffic** ✅ |
 | **M5** | **Interaction platform** ✅ | | **M15** | **Crime / heat** ✅ |
 | **M6** | **Combat + weapons** ✅ | | **M16** | **Full persistence** ✅ |
-| **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
+| **M7** | **AI + NPC roles** ✅ | | **M17** | **UI framework + debug tooling** ✅ |
 | **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
 | **M9** | **Missions + objectives** ✅ | | M19 | Packaging + documentation |
 
