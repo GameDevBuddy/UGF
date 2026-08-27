@@ -49,6 +49,11 @@ extends EntityDefinition
 ## thrown rock is both.
 @export var weapon: WeaponProfile
 
+@export_group("Survival")
+## What eating, drinking or injecting this does. Null is the normal case: most
+## items are not consumable.
+@export var consumable: ConsumableProfile
+
 @export_group("Interaction")
 ## What can be done to this item while it is lying in the world: take it,
 ## examine it, hotwire it. Empty is the usual case -- a pickup is normally
@@ -126,6 +131,8 @@ func validate() -> ValidationResult:
 		result.merge(equipment.validate())
 	if weapon != null:
 		result.merge(weapon.validate())
+	if consumable != null:
+		result.merge(consumable.validate())
 	for offered in interactions:
 		if offered != null:
 			result.merge(offered.validate())

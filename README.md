@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M11 complete ✅
+## Status: M0 – M12 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -17,7 +17,7 @@ that other systems change, and a way to die. M4 gives it things to carry and wea
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
-an economy. All twelve are green.
+an economy. M12 lets it be lived in. All thirteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -223,11 +223,6 @@ an economy. All twelve are green.
 - *Reputation pricing adapter* —
   `test_commerce_service.gd::test_a_liked_customer_pays_less_and_is_paid_more`
 
-```
-64 suite(s), 1541 test(s), 1541 passed, 0 failed, 3515 assertions
-RESULT: PASS
-```
-
 Every trade is validate-then-mutate with no step in between that can fail: currency, stock,
 capacity and restrictions are all checked first, and only once every one has passed does
 anything change. A purchase that took the money and then found the bag full is the bug this
@@ -265,6 +260,68 @@ the usual gamepad equivalents, for any action the project has not already define
 overwrites: rebind `jump` and it stays rebound through every future version of the addon.
 Without this the addon produces a character that compiles, spawns, validates and cannot move —
 and an unbound action is indistinguishable from an unpressed one at runtime.
+
+### M12 — Crafting + Survival + Gathering ✅
+
+| M12 deliverable | Where |
+| --- | --- |
+| Needs / meters | `survival/need_definition.gd`, `needs_component.gd` |
+| Temperature hooks | `survival/need_definition.gd` (`drains_towards`), `environment_zone.gd` |
+| Consumables | `survival/consumable_profile.gd`, `consumer_component.gd` |
+| RecipeDefinition | `crafting/recipe_definition.gd`, `recipe_ingredient.gd` |
+| Crafting stations / queue | `crafting/crafting_station.gd`, `crafting_component.gd` |
+| Resource nodes | `gathering/resource_node_definition.gd`, `resource_node.gd` |
+| Durability degradation | `crafting/recipe_ingredient.gd`, `gathering/resource_node.gd` |
+
+**M12 exit gate:**
+
+- *Gather → craft → consume* — `test_survival_loop.gd::test_gather_craft_consume`
+- *Needs save/load* — `test_survival_loop.gd::test_a_reloaded_survivor_is_still_hungry`
+- *Every stage refuses without half-running* —
+  `test_survival_loop.gd::test_the_loop_stalls_at_each_missing_step_rather_than_half_running`
+- *Survival is deletable* —
+  `test_survival_loop.gd::test_gathering_and_crafting_work_with_no_needs_at_all`
+
+```
+70 suite(s), 1684 test(s), 1684 passed, 0 failed, 4089 assertions
+RESULT: PASS
+```
+
+**Hunger, thirst, fatigue, oxygen and body temperature are one class.** They differ in their
+numbers and in which states they set, not in code. Temperature is the interesting case — it
+drains towards a comfortable middle rather than towards empty — and that is a
+`drains_towards` field, not a second mechanism. A cold zone is the same shape: it does not
+drain warmth, it multiplies how fast warmth drains, which is what lets two zones overlap and
+compose and what makes walking out of a cave restore exactly what walking in changed. A zone
+that drained directly would leave drift behind every round trip.
+
+**A tool is an ingredient that is not consumed.** Modelling it as a flag on `RecipeIngredient`
+rather than a second list beside `ingredients` is what lets a recipe say "two planks and a
+hammer" in one array, and what makes tool wear a property of the ingredient rather than a
+special case next to it. A broken axe is not an axe, in crafting and in gathering both —
+otherwise durability is decorative.
+
+Ingredients are consumed when a timed craft *starts*, not when it finishes. Cancelling a smelt
+does not un-melt the ore, and consuming up front is also what stops the same planks being spent
+on two benches at once. Room for the output is checked before anything is taken, which is the
+purchase-that-took-the-money bug from M11 wearing different clothes.
+
+Resource nodes yield through M11's `LootTableDefinition` rather than a yield list of their own.
+"A weighted table of items with guaranteed entries" is one idea, and two implementations of it
+would drift apart (rule 23). The roll takes an injected `RandomNumberGenerator`, so a test gets
+the same drop twice and a networked game can share the stream.
+
+`HarvestAction` is an `InteractionAction`, so a tree is chopped through exactly the pipeline a
+door is opened with and a timed harvest is an interaction *duration* rather than a second timer
+beside it. It lives in `gathering/` rather than `interaction/`, which is the direction that
+keeps both deletable.
+
+M12 also added `test_module_manifests.gd`, which sweeps every `*_module.gd` in the addon and
+checks that each dependency it declares names a module that actually ships. Twenty-four modules
+naming each other in `StringName` literals is a graph that rots quietly: a module can require
+`module.narrativee` and nothing complains — the registry simply never resolves it and the
+feature goes missing in a way that reads like a content bug. Verified by deliberately adding a
+bogus dependency and watching the suite name it.
 
 ---
 
@@ -439,6 +496,15 @@ method shadowing `Object._set` with a different signature. `can_instantiate()` i
 script that did not compile, and asserting on it names the file. Verified by deliberately
 breaking a script and watching the suite fail.
 
+**`_set` is a Godot virtual, and it is the most natural name in the world for a private
+setter.** `Object._set(StringName, Variant) -> bool` exists on everything, and declaring
+`func _set(need, value) -> void` is a *parse error* — "the function signature doesn't match the
+parent" — not an override. It has now cost this project twice, `WalletComponent` in M11 and
+`NeedsComponent` in M12, and the second time the compilation guard named the file in one run.
+The same trap sits on `_get`, `_notification` and `_to_string`; `ItemInstance.get_stack_id()`
+is named that way for the same reason. Use `_apply`, and expect the parse error to point at
+the *dependent* script rather than the one you edited.
+
 **`String.num(12.5, 2)` is `"12.5"`, not `"12.50"`.** It trims trailing zeros, which for money
 is always wrong. `pad_decimals()` after it; a currency with no decimals pads to none and is
 unaffected.
@@ -479,6 +545,19 @@ on `ObjectDB instances were leaked at exit`, and this is the easiest way to trip
 so an action that stashes `last_context` closes a `RefCounted` cycle that Godot's reference
 counting cannot break, and every resource in it survives to exit. Godot reports the count, not
 the culprit. Record the facts you need (`last_interactor`, `last_verb`), not the context.
+
+**`Node.name` is a `StringName`, not a `String`.** `assert_eq(["in", node.name], ["in", "Door"])`
+fails with `["in", &"Door"] != ["in", "Door"]` — the two compare equal on their own, but not
+once they are inside containers being compared element-wise. Wrap it in `String()` at the
+boundary rather than chasing the mismatch through a diff that looks identical apart from one
+ampersand.
+
+**A component that resolves a profile in `initialize()` resolves it once.**
+`DamageReceiverComponent`, `NeedsComponent` and the rest cache their definition at
+initialisation, which is the whole point — the resolution reads the entity definition by
+property name and should not run per frame. The consequence for a test is that setting
+`profile_override` *after* assembling the entity does nothing at all and looks like the
+override being ignored. Set it before, the way a scene would.
 
 **Also:** `Node3D.global_transform` is only legal inside the tree. `EntitySerializer` falls back
 to the local transform when an entity is captured before it is parented, rather than erroring
@@ -629,6 +708,24 @@ addons/universal_gameplay/
 │   ├── loot_table_definition.gd   weighted, guaranteed, nested. seeded rolls
 │   ├── loot_component.gd          rolls once. a corpse is generous only once
 │   └── loot_module.gd             the module manifest
+├── survival/
+│   ├── need_definition.gd         one meter. hunger, warmth, oxygen, sanity
+│   ├── needs_component.gd         the values, the bands, and what empty costs
+│   ├── consumable_profile.gd      what eating something does
+│   ├── consumer_component.gd      eating it. validate, then mutate
+│   ├── environment_zone.gd        a cave, a fire. it scales, it never drains
+│   └── survival_module.gd         the module manifest
+├── crafting/
+│   ├── recipe_ingredient.gd       spent or held. a tool is the held kind
+│   ├── recipe_definition.gd       what can be made from what, where, how long
+│   ├── crafting_station.gd        a forge is a set of tags and nothing else
+│   ├── crafting_component.gd      the queue. materials are spent up front
+│   └── crafting_module.gd         the module manifest
+├── gathering/
+│   ├── resource_node_definition.gd  what a tree gives up, and how often
+│   ├── resource_node.gd           charges, tool wear, respawn. yields via loot
+│   ├── harvest_action.gd          press E on the tree. M5's pipeline, reused
+│   └── gathering_module.gd        the module manifest
 ├── factions/
 │   ├── attitude_solver.gd         standing to disposition. static, no node
 │   ├── faction_definition.gd      a group with opinions and its bands
@@ -697,13 +794,13 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M11 are done. The build order follows dependency, not feature appeal.
+M0 through M12 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | **M10** | **Factions + reputation** ✅ |
 | **M1** | **Entity + save identity** ✅ | | **M11** | **Commerce + vendors + loot** ✅ |
-| **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
+| **M2** | **Character + input + locomotion** ✅ | | **M12** | **Crafting + survival** ✅ |
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
