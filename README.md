@@ -9,14 +9,14 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M8 complete ✅
+## Status: M0 – M9 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
-it. All nine are green.
+it. M9 gives the player a reason to do any of it. All ten are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -172,10 +172,36 @@ it. All nine are green.
 - *Branching conversation, persistent flags, events emitted for choices* —
   `test_dialogue_component.gd::test_a_branching_conversation_with_persistent_flags_and_events`
 
+### M9 — Missions + Objectives ✅
+
+| M9 deliverable | Where |
+| --- | --- |
+| MissionDefinition | `missions/mission_definition.gd` |
+| ObjectiveDefinition | `missions/objective_definition.gd`, `event_matcher.gd` |
+| Runtime state | `missions/mission_runtime.gd`, `objective_runtime.gd`, `mission_service.gd` |
+| Reward hooks | `missions/mission_reward.gd`, `narrative_reward.gd`, `item_reward.gd` |
+| Failure hooks | `ObjectiveDefinition.failure_event_name` |
+
+**M9 exit gate:**
+
+- *Mission reacts to combat, inventory and dialogue without importing them* —
+  `test_mission_service.gd::test_a_mission_reacts_to_combat_inventory_and_dialogue_without_importing_them`
+
 ```
-53 suite(s), 1297 test(s), 1297 passed, 0 failed, 2644 assertions
+58 suite(s), 1394 test(s), 1394 passed, 0 failed, 3001 assertions
 RESULT: PASS
 ```
+
+One `ObjectiveDefinition` covers the fourteen baseline kinds Implementation Plan 19 lists,
+because they differ in which bus event they count and what they require of it — and both
+are data. A kill objective is `actor_died` with a matcher on the instigator; an acquire
+objective is `item_acquired` with a matcher on the item id. The cost is that field names
+are strings, so a typo is content that silently never matches rather than a compile error;
+`EventMatcher` says so in its own doc comment.
+
+M9 also added the three publishers that gave missions something to hear: an inventory
+adapter, a narrative adapter and an area trigger. Each is deletable, and each is what keeps
+its own module from learning what a mission is.
 
 The plan lists a UI presenter as an M8 deliverable and this milestone ships none, on
 purpose. `DialogueRuntime` says which line is current and which options are open, and
@@ -357,6 +383,20 @@ scene-layout bug. Every M2 component recomputes the condition instead:
 set_physics_process(is_initialized() and auto_tick and body != null)
 ```
 
+**A script nothing references is never parsed, so its errors are invisible.** Godot compiles
+a `.gd` when something loads it. `AreaTrigger` shipped a call to a method that did not exist
+and the suite stayed green, because no test had imported it yet and the CI gate greps the
+run's output for `SCRIPT ERROR` — which never appears for a script that was never loaded.
+`--import` does not catch it either. `test_script_compilation.gd` now walks the addon and
+loads every script and scene, which is the cheapest possible guard against a class of
+mistake that is otherwise invisible until someone opens the editor.
+
+**`Object.has_method()` says nothing about arity.** Calling a one-argument method with no
+arguments is a runtime error, not a miss. `EventMatcher` reads a named field off an event
+and falls back to a zero-argument method — checking `has_method` alone turned a mistyped
+field name from "this objective never progresses" into a crash. `get_method_list()` carries
+the argument list; filter on it.
+
 **A `RefCounted` cycle between two objects is never collected, and Godot only reports the
 count.** `DialogueRuntime` holds its `DialogueContext` and the context pointed back at the
 runtime — a two-object cycle that leaked 436 ObjectDB instances at exit, because everything
@@ -458,7 +498,9 @@ addons/universal_gameplay/
 │   └── item_pickup.tscn           the pickup scene
 ├── inventory/
 │   ├── inventory_profile.gd       slots, weight, category filters
-│   └── inventory_component.gd     one container. transfers are atomic
+│   ├── inventory_component.gd     one container. transfers are atomic
+│   ├── inventory_event_adapter.gd the seam that announces an acquisition
+│   └── item_acquired_event.gd     …as a cross-feature fact
 ├── equipment/
 │   ├── equipment_profile.gd       where an item goes and what it grants
 │   ├── equipment_slot_definition.gd  one place a thing can be worn
@@ -508,8 +550,23 @@ addons/universal_gameplay/
 │   ├── state_requirement.gd       open, locked, downed. either end
 │   ├── interaction_action.gd      what happens on completion. usually nothing
 │   └── toggle_state_action.gd     the door, and everything shaped like a door
+├── missions/
+│   ├── event_matcher.gd           one question asked of an event, by field name
+│   ├── objective_definition.gd    one thing a mission asks for. fourteen kinds
+│   ├── objective_runtime.gd       how far along one objective is
+│   ├── mission_definition.gd      a whole mission, as content
+│   ├── mission_runtime.gd         one mission in progress. reads events only
+│   ├── mission_service.gd         every mission in flight. one bus subscription
+│   ├── mission_reward.gd          what a mission gives back
+│   ├── narrative_reward.gd        a flag, a counter, standing
+│   ├── item_reward.gd             the sword, the purse
+│   ├── area_trigger.gd            somebody reached this place
+│   ├── area_event.gd              …as a cross-feature fact
+│   └── mission_event.gd           started, finished, objective ticked off
 ├── narrative/
 │   ├── narrative_state_service.gd flags, variables, counters, standing
+│   ├── narrative_event_adapter.gd the seam that promotes a flag to the bus
+│   ├── narrative_event.gd         a flag moved, or a counter did
 │   └── narrative_module.gd        the module manifest
 ├── dialogue/
 │   ├── dialogue_definition.gd     a whole conversation, as content
@@ -550,7 +607,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M8 are done. The build order follows dependency, not feature appeal.
+M0 through M9 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -563,7 +620,7 @@ M0 through M8 are done. The build order follows dependency, not feature appeal.
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
 | **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
 | **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
-| M9 | Missions + objectives | | M19 | Packaging + documentation |
+| **M9** | **Missions + objectives** ✅ | | M19 | Packaging + documentation |
 
 Vertical slices gate breadth: adventure, shooter RPG, survival, GTA-style sandbox, then full
 hybrid. If a slice needs a circular dependency or a game-specific hack in Core, the
