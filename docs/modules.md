@@ -18,7 +18,7 @@ when absent -- a missing optional module is a valid state, never an error.
 | Animation | `module.animation` | `module.entity` | `module.locomotion` |
 | Camera | `module.camera` | `module.entity` | `module.locomotion` |
 | Character | `module.character` | `module.entity`, `module.locomotion` | `module.ai`, `module.animation`, `module.camera`, `module.combat`, `module.commerce`, `module.dialogue`, `module.equipment`, `module.factions`, `module.health`, `module.input`, `module.interaction`, `module.inventory`, `module.loot`, `module.stats`, `module.survival` |
-| Combat | `module.combat` | `module.entity`, `module.health` | `module.equipment`, `module.inventory`, `module.items`, `module.stats` |
+| Combat | `module.combat` | `module.entity`, `module.health` | `module.ai`, `module.animation`, `module.equipment`, `module.inventory`, `module.items`, `module.stats` |
 | Commerce | `module.commerce` | `module.inventory`, `module.items` | `module.entity`, `module.factions`, `module.interaction` |
 | Crafting | `module.crafting` | `module.inventory`, `module.items` | `module.entity`, `module.narrative` |
 | Crime and Heat | `module.crime` | — | `module.ai`, `module.entity`, `module.factions`, `module.health`, `module.narrative`, `module.world_state` |

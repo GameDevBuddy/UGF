@@ -38,6 +38,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | Class | Extends | Summary |
 | --- | --- | --- |
 | `AnimationAdapter` | `FrameworkComponent` | Writes movement state into an [AnimationTree], and nothing else. |
+| `AnimationEventRelay` | `FrameworkComponent` | The one place an animation is allowed to talk back to gameplay. |
 | `AnimationProfile` | `Resource` | Maps semantic gameplay state to [AnimationTree] parameters. |
 
 ## `camera/`
@@ -72,11 +73,13 @@ instantiated by the catalog, not referenced globally), and events have none
 | `DefenseProfile` | `Resource` | What a character can do about being hit: block, parry, dodge. |
 | `HitProvider` | `RefCounted` | Where combat asks the world what it just hit. |
 | `HitscanDelivery` | `AttackDelivery` | A shot that arrives the instant it is fired. |
+| `HurtboxDelivery` | `AttackDelivery` | An attack that hits whatever its weapon is currently touching. |
 | `MeleeDelivery` | `AttackDelivery` | A swing: everything inside an arc, within reach. |
 | `PhysicsHitProvider` | `HitProvider` | The real world, behind the seam. |
 | `Projectile` | `Node3D` | Something in flight that has not hit anything yet. |
 | `ProjectileDelivery` | `AttackDelivery` | A shot that takes time to arrive. |
 | `RecoilProfile` | `Resource` | How a weapon's aim degrades as it is fired, and how it settles. |
+| `TargetingComponent` | `FrameworkComponent` | Free aim, soft target and hard lock, as Implementation Plan 14 lists them. |
 | `WeaponComponent` | `FrameworkComponent` | Everything about a weapon that changes: ammunition, reloading, and how far its aim has drifted. |
 | `WeaponProfile` | `Resource` | What makes an item a weapon. |
 

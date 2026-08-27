@@ -38,6 +38,14 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_HEALTH,
 		]
 		_manifest.optional = [
+			# CombatComponent can open its damage window on an animation
+			# event instead of on authored timing. Optional in both
+			# directions: no relay means the authored startup runs.
+			GameplayNames.MODULE_ANIMATION,
+			# TargetingComponent draws its lock-on candidates from an NPC's
+			# perception memory when there is one, and from a list handed to
+			# it when there is not.
+			GameplayNames.MODULE_AI,
 			GameplayNames.MODULE_ITEMS,
 			GameplayNames.MODULE_EQUIPMENT,
 			GameplayNames.MODULE_INVENTORY,
