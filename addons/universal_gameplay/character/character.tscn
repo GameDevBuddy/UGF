@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://addons/universal_gameplay/camera/camera_adapter.gd" id="5_camera"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/animation/animation_adapter.gd" id="6_animation"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/character/character_controller.gd" id="7_controller"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/interaction/interactor_component.gd" id="8_interactor"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -46,10 +47,15 @@ movement = NodePath("../MovementComponent")
 script = ExtResource("6_animation")
 movement = NodePath("../MovementComponent")
 
-[node name="CharacterController" type="Node" parent="." node_paths=PackedStringArray("movement", "camera")]
+[node name="CharacterController" type="Node" parent="." node_paths=PackedStringArray("movement", "camera", "interactor")]
 script = ExtResource("7_controller")
 movement = NodePath("../MovementComponent")
 camera = NodePath("../CameraAdapter")
+interactor = NodePath("../InteractorComponent")
+
+[node name="InteractorComponent" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
+script = ExtResource("8_interactor")
+semantic_state = NodePath("../SemanticState")
 
 [node name="DefinitionBinder" type="Node" parent="."]
 script = ExtResource("1_binder")

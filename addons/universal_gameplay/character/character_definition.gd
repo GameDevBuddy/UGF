@@ -46,6 +46,15 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## How far this character can reach and how it finds what to reach for.
+## Optional: a character that never uses anything needs none.
+@export var interaction: InteractorProfile
+
+## What can be done [i]to[/i] this character: talk, search, revive, rob. The
+## other side of the same module, and the reason an NPC needs no Door script to
+## be interactable.
+@export var interactions: Array[InteractionDefinition] = []
+
 
 func validate() -> ValidationResult:
 	var result := super()
@@ -75,6 +84,11 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	if interaction != null:
+		result.merge(interaction.validate())
+	for offered in interactions:
+		if offered != null:
+			result.merge(offered.validate())
 	return result
 
 

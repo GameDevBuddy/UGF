@@ -137,6 +137,21 @@ func test_the_controller_is_wired_to_movement_and_camera() -> void:
 	assert_eq(controller.camera, character.get_node("CameraAdapter"))
 
 
+func test_the_controller_is_wired_to_the_interactor() -> void:
+	# Another silent one: the interact button would do nothing at all, and
+	# every other thing the character does would still work.
+	var character := _spawn()
+	var controller := character.get_node("CharacterController") as CharacterController
+	assert_eq(controller.interactor, character.get_node("InteractorComponent"))
+
+
+func test_the_interactor_is_wired_to_the_semantic_state() -> void:
+	var character := _spawn()
+	var interactor := character.get_node("InteractorComponent") as InteractorComponent
+	assert_eq(interactor.semantic_state, character.get_node("SemanticState"))
+	assert_not_null(interactor.get_profile())
+
+
 func test_the_scene_does_not_take_control_by_itself() -> void:
 	# Every NPC in a game is this scene. Taking control on spawn would make
 	# the first one instantiated the player.

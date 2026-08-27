@@ -43,6 +43,13 @@ extends EntityDefinition
 ## merely becoming unusable.
 @export var breaks_when_worn_out: bool = false
 
+@export_group("Interaction")
+## What can be done to this item while it is lying in the world: take it,
+## examine it, hotwire it. Empty is the usual case -- a pickup is normally
+## collected by touch or by a project's own take interaction rather than by an
+## authored list.
+@export var interactions: Array[InteractionDefinition] = []
+
 @export_group("Equipment")
 ## Where this can be equipped and what it grants. Null means it is not
 ## equippable, which is the normal case for most items.
@@ -111,4 +118,7 @@ func validate() -> ValidationResult:
 		)
 	if equipment != null:
 		result.merge(equipment.validate())
+	for offered in interactions:
+		if offered != null:
+			result.merge(offered.validate())
 	return result

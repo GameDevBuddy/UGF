@@ -9,12 +9,12 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M4 complete ✅
+## Status: M0 – M5 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
-that other systems change, and a way to die. M4 gives it things to carry and wear. All five
-are green.
+that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
+it a way to use the world. All six are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -105,8 +105,24 @@ are green.
 - *World pickup → inventory → equip → drop round trip* —
   `test_equipment.gd::test_world_pickup_to_inventory_to_equip_to_drop`
 
+### M5 — Interaction Platform ✅
+
+| M5 deliverable | Where |
+| --- | --- |
+| InteractionComponent (on the target) | `interaction/interaction_component.gd` |
+| InteractorComponent (on the actor) | `interaction/interactor_component.gd` |
+| Requirements | `interaction/item_requirement.gd`, `state_requirement.gd` |
+| Prompts | `InteractionDefinition.prompt`, `InteractorComponent.prompt_changed` |
+| Timed interactions | `InteractionDefinition.duration`, `interactor_component.gd` |
+| Action strategies | `interaction/interaction_action.gd`, `toggle_state_action.gd` |
+
+**M5 exit gate:**
+
+- *Door, pickup, NPC and vehicle on one pipeline* —
+  `test_interaction_pipeline.gd::test_all_four_are_the_same_component_and_the_same_call`
+
 ```
-32 suite(s), 734 test(s), 734 passed, 0 failed, 1386 assertions
+37 suite(s), 845 test(s), 845 passed, 0 failed, 1603 assertions
 RESULT: PASS
 ```
 
@@ -265,6 +281,13 @@ scene-layout bug. Every M2 component recomputes the condition instead:
 set_physics_process(is_initialized() and auto_tick and body != null)
 ```
 
+**A `Resource` that stores the context it was handed leaks the whole graph.** The CI gate fails
+on `ObjectDB instances were leaked at exit`, and this is the easiest way to trip it. An
+`InteractionContext` holds the `InteractionDefinition`, which holds the `InteractionAction` —
+so an action that stashes `last_context` closes a `RefCounted` cycle that Godot's reference
+counting cannot break, and every resource in it survives to exit. Godot reports the count, not
+the culprit. Record the facts you need (`last_interactor`, `last_verb`), not the context.
+
 **Also:** `Node3D.global_transform` is only legal inside the tree. `EntitySerializer` falls back
 to the local transform when an entity is captured before it is parented, rather than erroring
 and silently recording identity. The test harness yields one frame before running so its nodes
@@ -349,6 +372,17 @@ addons/universal_gameplay/
 │   ├── equipment_slot_definition.gd  one place a thing can be worn
 │   ├── loadout_profile.gd         which slots, and what is worn to start
 │   └── equipment_component.gd     wearing things, sourced per instance
+├── interaction/
+│   ├── interaction_definition.gd  one thing that can be done to something
+│   ├── interaction_context.gd     everything one attempt knows about itself
+│   ├── interaction_component.gd   what a target offers, and the transaction
+│   ├── interactor_component.gd    focus, reach, and the timing of a hold
+│   ├── interactor_profile.gd      how far something reaches, and how it looks
+│   ├── interaction_requirement.gd a condition. checked often, committed once
+│   ├── item_requirement.gd        the keycard, and the coin in the slot
+│   ├── state_requirement.gd       open, locked, downed. either end
+│   ├── interaction_action.gd      what happens on completion. usually nothing
+│   └── toggle_state_action.gd     the door, and everything shaped like a door
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -370,7 +404,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M4 are done. The build order follows dependency, not feature appeal.
+M0 through M5 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -379,7 +413,7 @@ M0 through M4 are done. The build order follows dependency, not feature appeal.
 | **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
-| M5 | Interaction platform | | M15 | Crime / heat |
+| **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
 | M6 | Combat + weapons | | M16 | Full persistence |
 | M7 | AI + NPC roles | | M17 | UI framework + debug tooling |
 | M8 | Dialogue + narrative state | | M18 | Networking adapter |

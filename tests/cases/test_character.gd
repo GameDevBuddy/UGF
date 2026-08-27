@@ -384,3 +384,103 @@ func test_an_injected_router_survives_initialisation() -> void:
 	split.set_router(injected)
 	split.initialize(EntityContext.create(entity, definition))
 	assert_eq(split.get_router(), injected)
+
+
+# --- Interaction ----------------------------------------------------------
+#
+# The controller's job here is only to turn a button into a call. That the
+# interaction itself works is test_interactor_component.gd's business; what
+# these prove is that the wire exists, because a disconnected interact button
+# fails silently and everything else about the character still works.
+
+func _wire_interactor() -> InteractorComponent:
+	var profile := InteractorProfile.new()
+	profile.auto_focus = false
+
+	var interactor := InteractorComponent.new()
+	interactor.auto_tick = false
+	interactor.profile_override = profile
+	entity.add_child(interactor)
+	interactor.initialize(EntityContext.create(entity, definition))
+	controller.interactor = interactor
+	return interactor
+
+
+func _door(interaction: InteractionDefinition) -> InteractionComponent:
+	var door := add_test_node(InteractionFixtures.target([interaction]))
+	InteractionFixtures.assemble(door)
+	return InteractionFixtures.interaction_of(door)
+
+
+func _is_open(interaction: InteractionComponent) -> bool:
+	var state := InteractionFixtures.state_of(interaction.get_entity_root())
+	return state.has_state(GameplayNames.STATE_OPEN)
+
+
+func test_the_interact_button_runs_the_focused_interaction() -> void:
+	var interactor := _wire_interactor()
+	var door := _door(InteractionFixtures.door())
+	interactor.set_focus(door)
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_INTERACT)
+	controller.drive(0.05)
+	assert_true(_is_open(door))
+
+
+func test_the_interact_button_does_nothing_with_nothing_in_reach() -> void:
+	_wire_interactor()
+	controller.take_control()
+	source.press(GameplayNames.ACTION_INTERACT)
+	controller.drive(0.05)
+	assert_false(controller.interactor.is_busy())
+
+
+func test_releasing_gives_up_a_timed_interaction() -> void:
+	var timed := InteractionFixtures.timed(1.0)
+	var action := ToggleStateAction.new()
+	action.state = GameplayNames.STATE_OPEN
+	timed.action = action
+
+	var interactor := _wire_interactor()
+	var door := _door(timed)
+	interactor.set_focus(door)
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_INTERACT)
+	controller.drive(0.05)
+	assert_true(interactor.is_busy())
+
+	source.advance_frame()
+	interactor.tick(0.5)
+	source.release(GameplayNames.ACTION_INTERACT)
+	controller.drive(0.05)
+
+	assert_false(interactor.is_busy())
+	assert_false(_is_open(door))
+
+
+func test_a_menu_gives_up_a_timed_interaction() -> void:
+	var timed := InteractionFixtures.timed(1.0)
+	var interactor := _wire_interactor()
+	var door := _door(timed)
+	interactor.set_focus(door)
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_INTERACT)
+	controller.drive(0.05)
+	assert_true(interactor.is_busy())
+
+	router.push_context(InputContexts.ui())
+	controller.drive(0.05)
+	assert_false(interactor.is_busy())
+
+
+func test_a_character_with_no_interactor_still_drives() -> void:
+	# The Interaction module is optional; the interact button pressed on a
+	# character that has none must not be an error (rule 31).
+	controller.take_control()
+	source.press(GameplayNames.ACTION_INTERACT)
+	source.hold(GameplayNames.ACTION_MOVE_FORWARD)
+	_drive()
+	assert_true(movement.is_moving())
