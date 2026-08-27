@@ -37,6 +37,29 @@ to resolve with its id named; a definition field that changed shape fails
 validation with the resource path; a save from an older schema is refused by
 `MigrationRegistry` unless a path to the current schema exists.
 
+## The save file format changed once, before 1.0
+
+`FileSaveBackend` used to write a save as a bare `store_var` with Godot's
+`allow_objects` flag switched on, and read it back the same way. That flag
+lets a save file decide which classes the game instantiates, and a decoded
+object can carry a script that runs — so a save, which lives in a directory
+the player can write and gets synced between machines, was a path to code
+execution.
+
+Saves are now written inside a small envelope carrying a format version, a
+checksum and the payload, and objects are never decoded on the way in.
+
+**Saves written before that change cannot be loaded.** There is no migration,
+and this is the one place the framework refuses to provide one: reading an old
+save means decoding it the old way, which is the vulnerability. A file with no
+envelope reads as damaged, because there is no way to tell it apart from one
+that is.
+
+This is a container change, not a content change, so `SAVE_SCHEMA` does not
+move and no `SaveMigration` is involved. It only matters if you shipped a
+build on an earlier commit; if you are adopting the framework now, there is
+nothing to do.
+
 ## Save schema migrations
 
 `MigrationRegistry` holds one step per version transition — 1→2, 2→3 — and
