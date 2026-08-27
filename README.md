@@ -9,15 +9,15 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M10 complete ✅
+## Status: M0 – M11 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
-it. M9 gives the player a reason to do any of it. M10 gives the world sides to take.
-All eleven are green.
+it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
+an economy. All twelve are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -205,10 +205,33 @@ All eleven are green.
 - *Vendor pricing consumes faction results via an adapter* —
   `test_faction_adapters.gd::test_a_liked_customer_is_charged_less`
 
+### M11 — Commerce + Vendors + Loot ✅
+
+| M11 deliverable | Where |
+| --- | --- |
+| Wallet / currencies | `commerce/wallet_component.gd`, `currency_definition.gd` |
+| VendorDefinition | `commerce/vendor_definition.gd`, `vendor_component.gd` |
+| CommerceService | `commerce/commerce_service.gd` |
+| Pricing / stock policies | `commerce/standard_pricing_policy.gd`, `stock_entry.gd` |
+| Loot tables | `loot/loot_table_definition.gd`, `loot_entry.gd`, `loot_component.gd` |
+
+**M11 exit gate:**
+
+- *Atomic purchase and sale* —
+  `test_commerce_service.gd::test_a_purchase_the_bag_cannot_hold_changes_nothing`
+- *Restock* — `test_commerce_service.gd::test_a_shelf_refills_on_its_interval`
+- *Reputation pricing adapter* —
+  `test_commerce_service.gd::test_a_liked_customer_pays_less_and_is_paid_more`
+
 ```
-61 suite(s), 1457 test(s), 1457 passed, 0 failed, 3144 assertions
+64 suite(s), 1541 test(s), 1541 passed, 0 failed, 3515 assertions
 RESULT: PASS
 ```
+
+Every trade is validate-then-mutate with no step in between that can fail: currency, stock,
+capacity and restrictions are all checked first, and only once every one has passed does
+anything change. A purchase that took the money and then found the bag full is the bug this
+shape exists to make impossible, and there is a test for exactly it.
 
 The gate is met by AI declaring the question and Factions answering it. `HostilityProvider`
 lives in `ai/` and defaults to "everything is an enemy"; `FactionHostilityProvider` lives in
@@ -410,6 +433,16 @@ scene-layout bug. Every M2 component recomputes the condition instead:
 set_physics_process(is_initialized() and auto_tick and body != null)
 ```
 
+**`load()` returns a `GDScript` even when it failed to compile.** A null check is not enough
+to prove a script is sound — `test_script_compilation.gd` passed while `WalletComponent` had a
+method shadowing `Object._set` with a different signature. `can_instantiate()` is false for a
+script that did not compile, and asserting on it names the file. Verified by deliberately
+breaking a script and watching the suite fail.
+
+**`String.num(12.5, 2)` is `"12.5"`, not `"12.50"`.** It trims trailing zeros, which for money
+is always wrong. `pad_decimals()` after it; a currency with no decimals pads to none and is
+unaffected.
+
 **A script nothing references is never parsed, so its errors are invisible.** Godot compiles
 a `.gd` when something loads it. `AreaTrigger` shipped a call to a method that did not exist
 and the suite stayed green, because no test had imported it yet and the CI gate greps the
@@ -578,6 +611,24 @@ addons/universal_gameplay/
 │   ├── state_requirement.gd       open, locked, downed. either end
 │   ├── interaction_action.gd      what happens on completion. usually nothing
 │   └── toggle_state_action.gd     the door, and everything shaped like a door
+├── commerce/
+│   ├── currency_definition.gd     money: symbol, precision, ceilings
+│   ├── wallet_component.gd        balances. every mutation returns a result
+│   ├── stock_entry.gd             one line on a shelf
+│   ├── vendor_definition.gd       what a shop stocks, charges and refills
+│   ├── vendor_component.gd        the live shelf. its own copy, never shared
+│   ├── pricing_policy.gd          what something costs
+│   ├── standard_pricing_policy.gd markup, markdown, and how much they like you
+│   ├── trade_context.gd           one purchase or sale, start to finish
+│   ├── commerce_service.gd        validate everything, then move everything
+│   ├── commerce_event.gd          something changed hands
+│   ├── trade_action.gd            press E on the shopkeeper. M5's pipeline
+│   └── commerce_module.gd         the module manifest
+├── loot/
+│   ├── loot_entry.gd              one thing that might drop
+│   ├── loot_table_definition.gd   weighted, guaranteed, nested. seeded rolls
+│   ├── loot_component.gd          rolls once. a corpse is generous only once
+│   └── loot_module.gd             the module manifest
 ├── factions/
 │   ├── attitude_solver.gd         standing to disposition. static, no node
 │   ├── faction_definition.gd      a group with opinions and its bands
@@ -646,12 +697,12 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M10 are done. The build order follows dependency, not feature appeal.
+M0 through M11 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | **M10** | **Factions + reputation** ✅ |
-| **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
+| **M1** | **Entity + save identity** ✅ | | **M11** | **Commerce + vendors + loot** ✅ |
 | **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |

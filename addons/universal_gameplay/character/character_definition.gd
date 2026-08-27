@@ -46,6 +46,13 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## What this character sells, when it sells anything. Optional: most
+## characters are not shops.
+@export var vendor: VendorDefinition
+
+## What this character leaves behind. Optional: most characters drop nothing.
+@export var loot: LootTableDefinition
+
 ## Which group this character belongs to. Optional: an entity with no
 ## allegiance is neutral to everyone, which is what wildlife and scenery are.
 @export var faction: FactionDefinition
@@ -101,6 +108,10 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	if vendor != null:
+		result.merge(vendor.validate())
+	if loot != null:
+		result.merge(loot.validate())
 	if faction != null:
 		result.merge(faction.validate())
 	if dialogue != null:

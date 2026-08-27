@@ -15,12 +15,18 @@ extends FrameworkTestCase
 const ADDON_ROOT: String = "res://addons/universal_gameplay"
 
 
-func test_every_script_in_the_addon_loads() -> void:
+func test_every_script_in_the_addon_compiles() -> void:
+	# load() returns a GDScript object even when it failed to compile, so
+	# a null check is not enough -- that was how a WalletComponent method
+	# shadowing an Object virtual got past this suite once already.
+	# can_instantiate() is false for a script that did not compile.
 	var paths := _collect(ADDON_ROOT)
 	assert_true(paths.size() > 50, "expected the addon to have scripts to check")
 	for path in paths:
-		var script: Resource = load(path)
+		var script: GDScript = load(path)
 		assert_not_null(script, "%s failed to load" % path)
+		if script != null:
+			assert_true(script.can_instantiate(), "%s did not compile" % path)
 
 
 func test_every_scene_in_the_addon_loads() -> void:
