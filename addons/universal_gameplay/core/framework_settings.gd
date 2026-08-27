@@ -19,6 +19,17 @@ extends Resource
 ## treated as disabled, so adding a module is always an explicit act.
 @export var enabled_modules: Dictionary[StringName, bool] = {}
 
+## Register [member enabled_modules] from [ModuleCatalog] during bootstrap.
+##
+## On by default, because the alternative is the trap this framework keeps
+## walking into: a project ticks Inventory, gets no inventory, and has nothing
+## to blame -- every method involved behaved exactly as documented.
+##
+## Turn it off to register modules by hand, which a project needs when it
+## substitutes its own implementation of a shipped module, or registers one the
+## addon does not ship.
+@export var register_enabled_modules: bool = true
+
 ## When true, validation warnings fail the build. Off during development,
 ## on in CI.
 @export var strict_validation: bool = false

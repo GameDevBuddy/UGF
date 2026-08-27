@@ -6,5 +6,7 @@
 script = ExtResource("1_770bl")
 definition_paths = Array[String](["res://tests/content"])
 enabled_modules = Dictionary[StringName, bool]({
-&"module.inventory": true
+&"module.entity": true,
+&"module.inventory": true,
+&"module.items": true
 })

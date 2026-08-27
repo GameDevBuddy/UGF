@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="FrameworkSettings" format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/core/framework_settings.gd" id="1_settings"]
+
+[resource]
+script = ExtResource("1_settings")
+definition_paths = Array[String](["res://examples/survival/content"])
+enabled_modules = Dictionary[StringName, bool]({
+&"module.crafting": true,
+&"module.entity": true,
+&"module.gathering": true,
+&"module.health": true,
+&"module.interaction": true,
+&"module.inventory": true,
+&"module.items": true,
+&"module.loot": true,
+&"module.save": true,
+&"module.stats": true,
+&"module.status_effects": true,
+&"module.survival": true
+})
+register_enabled_modules = true
+strict_validation = false
+validate_on_bootstrap = true
+scan_definitions_on_bootstrap = true
+verbose_logging = false

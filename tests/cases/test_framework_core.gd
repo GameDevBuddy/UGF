@@ -185,12 +185,17 @@ func test_freed_service_is_not_reported_as_present() -> void:
 func test_has_feature_reflects_registration_not_intent() -> void:
 	# Settings say what the project asked for; has_feature says what actually
 	# came up. Adapters must branch on the latter.
+	#
+	# Vehicles alone is the honest way to prove the gap now that bootstrap
+	# installs what settings ask for: Vehicles requires Entity, so the list
+	# does not resolve, and the project's intent outlives the failure.
 	var settings := FrameworkSettings.new()
 	settings.set_module_enabled(&"module.vehicles", true)
-	core.bootstrap(settings)
+	var result: ValidationResult = core.bootstrap(settings)
 
 	assert_true(core.is_module_enabled(&"module.vehicles"), "The project asked for it")
 	assert_false(core.has_feature(&"module.vehicles"), "But nothing registered it")
+	assert_true(result.has_errors(), "And bootstrap said why rather than staying quiet")
 
 	core.register_module(_module(&"module.vehicles"))
 	assert_true(core.has_feature(&"module.vehicles"))

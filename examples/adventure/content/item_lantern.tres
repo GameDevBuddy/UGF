@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/items/item_definition.gd" id="1_item"]
+[ext_resource type="PackedScene" path="res://addons/universal_gameplay/items/item_pickup.tscn" id="2_pickup"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"example.item.lantern"
+display_name = "Brass Lantern"
+tags = Array[StringName]([&"item.tool", &"quest"])
+scene = ExtResource("2_pickup")
+category = &"item.tool"
+max_stack = 1
+weight = 1.5
+base_value = 40.0

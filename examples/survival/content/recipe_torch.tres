@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="RecipeDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/crafting/recipe_definition.gd" id="1_recipe"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/crafting/recipe_ingredient.gd" id="2_ingredient"]
+
+[sub_resource type="Resource" id="Ingredient_kindling"]
+script = ExtResource("2_ingredient")
+item_id = &"example.item.kindling"
+quantity = 2
+consumed = true
+
+[sub_resource type="Resource" id="Ingredient_resin"]
+script = ExtResource("2_ingredient")
+item_id = &"example.item.pine_resin"
+quantity = 1
+consumed = true
+
+[resource]
+script = ExtResource("1_recipe")
+id = &"example.recipe.torch"
+display_name = "Torch"
+ingredients = Array[Resource]([SubResource("Ingredient_kindling"), SubResource("Ingredient_resin")])
+output_id = &"example.item.torch"
+output_quantity = 1
+craft_time = 0.0
+category = &"recipe.tool"
