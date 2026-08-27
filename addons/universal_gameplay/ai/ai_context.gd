@@ -49,6 +49,36 @@ var role: NPCRoleDefinition = null
 var delta: float = 0.0
 
 
+## Whether this NPC should fight [param target].
+##
+## Routed through the controller's [HostilityProvider] so a brain never learns
+## what a faction is. With none installed the answer is yes, which is what an
+## arena shooter wants (rule 31).
+func is_hostile(target: Node) -> bool:
+	if target == null or target == actor:
+		return false
+	if controller == null:
+		return true
+	return controller.get_hostility_provider().is_hostile(actor, target)
+
+
+func is_ally(target: Node) -> bool:
+	if target == null or controller == null:
+		return false
+	return controller.get_hostility_provider().is_ally(actor, target)
+
+
+## How threatening [param target] looks once the hostility provider has had
+## its say. A brain choosing between two enemies sorts on this.
+func get_threat_of(entry: MemoryEntry) -> float:
+	if entry == null:
+		return 0.0
+	var scale := 1.0
+	if controller != null:
+		scale = controller.get_hostility_provider().get_threat_scale(actor, entry.target)
+	return entry.threat * scale
+
+
 func get_position() -> Vector3:
 	if actor is Node3D and (actor as Node3D).is_inside_tree():
 		return (actor as Node3D).global_position
@@ -73,14 +103,37 @@ func can_fight() -> bool:
 	return combat != null and combat.get_attack() != null
 
 
-## The most pressing thing currently in view, or null.
+## The most pressing hostile thing currently in view, or null.
+##
+## Filtered by hostility rather than taking whatever the memory ranked first:
+## an NPC that charged the most threatening thing it could see would attack
+## its own escort.
 func get_primary_target() -> MemoryEntry:
-	return memory.get_primary(get_position()) if memory != null else null
+	if memory == null:
+		return null
+	var best: MemoryEntry = null
+	var best_threat := -1.0
+	for entry in memory.get_visible():
+		if not is_hostile(entry.target):
+			continue
+		var threat := get_threat_of(entry)
+		if best == null or threat > best_threat:
+			best = entry
+			best_threat = threat
+	return best
 
 
-## The freshest thing remembered but not in view, or null.
+## The freshest hostile thing remembered but not in view, or null.
 func get_search_target() -> MemoryEntry:
-	return memory.get_freshest_memory() if memory != null else null
+	if memory == null:
+		return null
+	var best: MemoryEntry = null
+	for entry in memory.get_remembered():
+		if not is_hostile(entry.target):
+			continue
+		if best == null or entry.time_since_seen < best.time_since_seen:
+			best = entry
+	return best
 
 
 func _to_string() -> String:

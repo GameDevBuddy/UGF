@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://addons/universal_gameplay/ai/ai_controller_component.gd" id="14_ai"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/dialogue_component.gd" id="15_dialogue"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/dialogue_event_adapter.gd" id="16_dialogue_events"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/factions/faction_component.gd" id="17_faction"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/factions/faction_ai_adapter.gd" id="18_faction_ai"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -105,6 +107,13 @@ script = ExtResource("15_dialogue")
 [node name="DialogueEventAdapter" type="Node" parent="." node_paths=PackedStringArray("dialogue")]
 script = ExtResource("16_dialogue_events")
 dialogue = NodePath("../DialogueComponent")
+
+[node name="FactionComponent" type="Node" parent="."]
+script = ExtResource("17_faction")
+
+[node name="FactionAIAdapter" type="Node" parent="." node_paths=PackedStringArray("controller")]
+script = ExtResource("18_faction_ai")
+controller = NodePath("../AIControllerComponent")
 
 [node name="DefinitionBinder" type="Node" parent="."]
 script = ExtResource("1_binder")

@@ -63,6 +63,7 @@ var _state: StringName = &""
 var _home: Vector3 = Vector3.ZERO
 var _has_home: bool = false
 var _rng: RandomNumberGenerator = null
+var _hostility: HostilityProvider = null
 var _since_think: float = 0.0
 var _active: bool = true
 var _move_goal: Vector3 = Vector3.ZERO
@@ -202,6 +203,22 @@ func pick_wander_goal() -> Vector3:
 	var angle := rng.randf() * TAU
 	var distance := radius * sqrt(rng.randf())
 	return _home + Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
+
+
+## Who this NPC treats as an enemy.
+##
+## Defaults to a provider that says everyone, so an arena shooter with no
+## social system installed still has enemies that fight. A
+## [FactionAIAdapter] replaces it with one backed by faction standing, and a
+## project with its own team system replaces it with its own (rule 20).
+func get_hostility_provider() -> HostilityProvider:
+	if _hostility == null:
+		_hostility = HostilityProvider.new()
+	return _hostility
+
+
+func set_hostility_provider(provider: HostilityProvider) -> void:
+	_hostility = provider
 
 
 ## Deterministic randomness. Injected so a test gets the same wander twice and

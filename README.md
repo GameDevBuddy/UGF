@@ -9,14 +9,15 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M9 complete ✅
+## Status: M0 – M10 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
-it. M9 gives the player a reason to do any of it. All ten are green.
+it. M9 gives the player a reason to do any of it. M10 gives the world sides to take.
+All eleven are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -187,10 +188,36 @@ it. M9 gives the player a reason to do any of it. All ten are green.
 - *Mission reacts to combat, inventory and dialogue without importing them* —
   `test_mission_service.gd::test_a_mission_reacts_to_combat_inventory_and_dialogue_without_importing_them`
 
+### M10 — Factions + Reputation ✅
+
+| M10 deliverable | Where |
+| --- | --- |
+| FactionDefinition | `factions/faction_definition.gd` |
+| FactionService | `factions/faction_service.gd` |
+| Reputation | `FactionService.get_reputation`, `propagate_reputation` |
+| Attitude resolver | `factions/attitude_solver.gd` |
+| Faction events | `factions/faction_event_adapter.gd` |
+
+**M10 exit gate:**
+
+- *AI hostility consumes faction results via an adapter* —
+  `test_faction_adapters.gd::test_a_guard_charges_a_bandit_and_ignores_a_merchant`
+- *Vendor pricing consumes faction results via an adapter* —
+  `test_faction_adapters.gd::test_a_liked_customer_is_charged_less`
+
 ```
-58 suite(s), 1394 test(s), 1394 passed, 0 failed, 3001 assertions
+61 suite(s), 1457 test(s), 1457 passed, 0 failed, 3144 assertions
 RESULT: PASS
 ```
+
+The gate is met by AI declaring the question and Factions answering it. `HostilityProvider`
+lives in `ai/` and defaults to "everything is an enemy"; `FactionHostilityProvider` lives in
+`factions/` and answers from standing; `FactionAIAdapter` hands one to the other. No file in
+`ai/` mentions a faction and no file in `factions/` mentions a brain.
+
+Pricing is the same shape, one milestone early: Commerce is M11, but what a pricing policy
+needs from Factions is a single multiplier, and `FactionPriceAdapter` produces and tests it
+now rather than waiting to be written twice.
 
 One `ObjectiveDefinition` covers the fourteen baseline kinds Implementation Plan 19 lists,
 because they differ in which bus event they count and what they require of it — and both
@@ -517,6 +544,7 @@ addons/universal_gameplay/
 │   ├── ai_memory.gd               everything it knows. it forgets on purpose
 │   ├── ai_context.gd              everything a brain is given to think with
 │   ├── ai_brain.gd                what to do next. a resource, no state
+│   ├── hostility_provider.gd      is that an enemy? a seam, not a policy
 │   ├── role_brain.gd              one brain, three stances: the exit gate
 │   ├── npc_role_definition.gd     civilian, guard, combatant, vendor
 │   ├── navigation_adapter.gd      a navmesh when there is one, straight when not
@@ -550,6 +578,17 @@ addons/universal_gameplay/
 │   ├── state_requirement.gd       open, locked, downed. either end
 │   ├── interaction_action.gd      what happens on completion. usually nothing
 │   └── toggle_state_action.gd     the door, and everything shaped like a door
+├── factions/
+│   ├── attitude_solver.gd         standing to disposition. static, no node
+│   ├── faction_definition.gd      a group with opinions and its bands
+│   ├── faction_service.gd         relations, reputation, attitude
+│   ├── faction_component.gd       which side an entity is on
+│   ├── faction_hostility_provider.gd  answers the AI's question from standing
+│   ├── faction_ai_adapter.gd      hands the provider to a brain. deletable
+│   ├── faction_price_adapter.gd   standing to a price multiplier, for M11
+│   ├── faction_event_adapter.gd   the seam that promotes a change of heart
+│   ├── faction_event.gd           …as a cross-feature fact
+│   └── factions_module.gd         the module manifest
 ├── missions/
 │   ├── event_matcher.gd           one question asked of an event, by field name
 │   ├── objective_definition.gd    one thing a mission asks for. fourteen kinds
@@ -607,11 +646,11 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M9 are done. The build order follows dependency, not feature appeal.
+M0 through M10 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
-| **M0** | **Foundation contract** ✅ | | M10 | Factions + reputation |
+| **M0** | **Foundation contract** ✅ | | **M10** | **Factions + reputation** ✅ |
 | **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
 | **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
