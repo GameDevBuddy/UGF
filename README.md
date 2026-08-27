@@ -9,13 +9,14 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M7 complete ✅
+## Status: M0 – M8 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
-without a player. All eight are green.
+without a player. M8 gives the world something to say and somewhere to remember
+it. All nine are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -156,10 +157,32 @@ without a player. All eight are green.
   `test_npc_roles.gd::test_all_three_roles_are_the_same_composition` and
   `::test_and_do_three_different_things_about_it`
 
+### M8 — Dialogue + Narrative State ✅
+
+| M8 deliverable | Where |
+| --- | --- |
+| DialogueDefinition / runtime | `dialogue/dialogue_definition.gd`, `dialogue_runtime.gd` |
+| Conditions | `dialogue/dialogue_condition.gd`, `narrative_condition.gd`, `item_condition.gd` |
+| Actions | `dialogue/dialogue_action.gd`, `narrative_action.gd` |
+| NarrativeStateService | `narrative/narrative_state_service.gd` |
+| UI presenter | *the runtime presents nothing — see below* |
+
+**M8 exit gate:**
+
+- *Branching conversation, persistent flags, events emitted for choices* —
+  `test_dialogue_component.gd::test_a_branching_conversation_with_persistent_flags_and_events`
+
 ```
-49 suite(s), 1163 test(s), 1163 passed, 0 failed, 2393 assertions
+53 suite(s), 1297 test(s), 1297 passed, 0 failed, 2644 assertions
 RESULT: PASS
 ```
+
+The plan lists a UI presenter as an M8 deliverable and this milestone ships none, on
+purpose. `DialogueRuntime` says which line is current and which options are open, and
+emits a signal when either changes; drawing them is a project's decision about its own
+look. Shipping a Control here would be the framework owning presentation, which rule 21
+forbids — and the first thing every project would delete. M17 is where UI framework
+patterns belong.
 
 Enabling the addon binds the framework's semantic actions to WASD, space, shift, ctrl, E and
 the usual gamepad equivalents, for any action the project has not already defined. It never
@@ -258,6 +281,24 @@ event monitor needs.
 
 ---
 
+### 4. Four dialogue node types, not six
+
+Implementation Plan 18 lists Line, Choice, Branch, Action, Jump and End. This framework
+ships four: Action and Jump are fields on the `DialogueNode` base rather than types of
+their own.
+
+The reason is that both already exist there. Every node needs to be able to run actions on
+entry and to name a successor, so `enter_actions` and `next` have to be on the base
+regardless — and once they are, an Action node is a node with actions and no text, and a
+Jump node is a node whose only content is where it goes. Two subclasses whose entire body
+would be inherited is the abstraction rule 23 asks us not to add.
+
+The consequence worth stating: a project porting a graph from a tool that has explicit
+Action and Jump nodes maps both onto a bare `DialogueNode`. `DialogueFixtures.action_node`
+in the test support shows the shape.
+
+---
+
 ## A Godot 4.7 finding worth knowing
 
 **Object-typed signal parameters on an autoload script leak that parameter's script at exit.**
@@ -315,6 +356,14 @@ scene-layout bug. Every M2 component recomputes the condition instead:
 ```gdscript
 set_physics_process(is_initialized() and auto_tick and body != null)
 ```
+
+**A `RefCounted` cycle between two objects is never collected, and Godot only reports the
+count.** `DialogueRuntime` holds its `DialogueContext` and the context pointed back at the
+runtime — a two-object cycle that leaked 436 ObjectDB instances at exit, because everything
+either one reached stayed alive with them. Godot reports `N instances were leaked` and
+names nothing. The fix is to make one direction weak (`weakref`), and the tell is that the
+count is large and round-ish: a leak of hundreds from a suite that creates dozens of
+objects means a cycle rooted somewhere reaching a big graph.
 
 **A lambda captures a value type by value, so a counter incremented inside one never
 changes.** `var hits := 0` followed by `signal.connect(func(): hits += 1)` compiles, runs, and
@@ -459,6 +508,27 @@ addons/universal_gameplay/
 │   ├── state_requirement.gd       open, locked, downed. either end
 │   ├── interaction_action.gd      what happens on completion. usually nothing
 │   └── toggle_state_action.gd     the door, and everything shaped like a door
+├── narrative/
+│   ├── narrative_state_service.gd flags, variables, counters, standing
+│   └── narrative_module.gd        the module manifest
+├── dialogue/
+│   ├── dialogue_definition.gd     a whole conversation, as content
+│   ├── dialogue_node.gd           one step. line, choice, branch or end
+│   ├── line_node.gd               somebody says something and it waits
+│   ├── choice_node.gd             the conversation stops and the player picks
+│   ├── dialogue_choice.gd         one thing the player can say
+│   ├── branch_node.gd             it decides for itself. first match wins
+│   ├── end_node.gd                over, and how it ended
+│   ├── dialogue_condition.gd      a question. never mutates
+│   ├── narrative_condition.gd     flags, variables, counters, standing
+│   ├── item_condition.gd          the quest item, the bribe
+│   ├── dialogue_action.gd         something it does to the world
+│   ├── narrative_action.gd        raise, set, bump, shift
+│   ├── dialogue_context.gd        what one conversation knows
+│   ├── dialogue_runtime.gd        the conversation itself. no scene needed
+│   ├── dialogue_component.gd      hangs one off an NPC
+│   ├── talk_action.gd             press E on the NPC. M5's pipeline, reused
+│   └── dialogue_event_adapter.gd  the seam that promotes a choice to the bus
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -480,7 +550,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M7 are done. The build order follows dependency, not feature appeal.
+M0 through M8 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -492,7 +562,7 @@ M0 through M7 are done. The build order follows dependency, not feature appeal.
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
 | **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
-| M8 | Dialogue + narrative state | | M18 | Networking adapter |
+| **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
 | M9 | Missions + objectives | | M19 | Packaging + documentation |
 
 Vertical slices gate breadth: adventure, shooter RPG, survival, GTA-style sandbox, then full

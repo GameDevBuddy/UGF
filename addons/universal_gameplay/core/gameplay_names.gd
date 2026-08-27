@@ -118,6 +118,8 @@ const STAT_RESISTANCE: StringName = &"stat.resistance"
 # subclasses return one of these from get_event_name().
 
 const EVENT_ACTOR_DIED: StringName = &"actor_died"
+const EVENT_DIALOGUE_COMPLETED: StringName = &"dialogue_completed"
+const EVENT_DIALOGUE_CHOICE: StringName = &"dialogue_choice"
 
 # --- AI activity names ---------------------------------------------------
 #
@@ -140,6 +142,7 @@ const SERVICE_WORLD_STATE: StringName = &"service.world_state"
 const SERVICE_SPAWN: StringName = &"service.spawn"
 const SERVICE_OBJECTIVE: StringName = &"service.objective"
 const SERVICE_INPUT: StringName = &"service.input"
+const SERVICE_NARRATIVE: StringName = &"service.narrative"
 
 # --- Core module identifiers ---------------------------------------------
 # Feature modules declare these in their manifest. Core is not listed: it is
@@ -161,6 +164,7 @@ const MODULE_INTERACTION: StringName = &"module.interaction"
 const MODULE_COMBAT: StringName = &"module.combat"
 const MODULE_AI: StringName = &"module.ai"
 const MODULE_DIALOGUE: StringName = &"module.dialogue"
+const MODULE_NARRATIVE: StringName = &"module.narrative"
 const MODULE_MISSIONS: StringName = &"module.missions"
 const MODULE_FACTIONS: StringName = &"module.factions"
 const MODULE_COMMERCE: StringName = &"module.commerce"

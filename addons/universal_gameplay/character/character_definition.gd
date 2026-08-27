@@ -46,6 +46,10 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## What this character says when talked to. Optional: most characters say
+## nothing, and a project that installs no Dialogue module leaves it blank.
+@export var dialogue: DialogueDefinition
+
 ## What this character is for when nobody is controlling it: civilian, guard,
 ## combatant, vendor. Optional -- a character with no role is one a player is
 ## expected to possess, or one a project drives itself.
@@ -93,6 +97,8 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	if dialogue != null:
+		result.merge(dialogue.validate())
 	if role != null:
 		result.merge(role.validate())
 	if combat != null:
