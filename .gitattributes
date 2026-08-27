@@ -11,3 +11,5 @@
 *.ogg binary
 *.wav binary
 *.glb binary
+
+*.docx binary

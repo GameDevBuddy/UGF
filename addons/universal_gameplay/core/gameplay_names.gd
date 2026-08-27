@@ -28,6 +28,31 @@ const STATE_DOWNED: StringName = &"state.downed"
 const STATE_SPRINTING: StringName = &"state.movement.sprinting"
 const STATE_CROUCHING: StringName = &"state.movement.crouching"
 const STATE_AIRBORNE: StringName = &"state.movement.airborne"
+const STATE_MOVING: StringName = &"state.movement.moving"
+
+# --- Semantic input actions ----------------------------------------------
+#
+# Gameplay asks for these, never for a key or a button (Implementation Plan
+# 24). Godot's InputMap still owns the bindings behind them; what the router
+# decides is which context is allowed to hear them.
+
+const ACTION_MOVE_LEFT: StringName = &"move_left"
+const ACTION_MOVE_RIGHT: StringName = &"move_right"
+const ACTION_MOVE_FORWARD: StringName = &"move_forward"
+const ACTION_MOVE_BACK: StringName = &"move_back"
+const ACTION_JUMP: StringName = &"jump"
+const ACTION_SPRINT: StringName = &"sprint"
+const ACTION_CROUCH: StringName = &"crouch"
+const ACTION_INTERACT: StringName = &"interact"
+
+# --- Input context identifiers -------------------------------------------
+
+const INPUT_CONTEXT_ON_FOOT: StringName = &"input.on_foot"
+const INPUT_CONTEXT_VEHICLE_DRIVER: StringName = &"input.vehicle_driver"
+const INPUT_CONTEXT_VEHICLE_PASSENGER: StringName = &"input.vehicle_passenger"
+const INPUT_CONTEXT_UI: StringName = &"input.ui"
+const INPUT_CONTEXT_DIALOGUE: StringName = &"input.dialogue"
+const INPUT_CONTEXT_DISABLED: StringName = &"input.disabled"
 
 # --- Cross-feature event names -------------------------------------------
 # These match the EventBus signal names one-for-one. FrameworkEvent
@@ -42,6 +67,7 @@ const SERVICE_SCENE_FLOW: StringName = &"service.scene_flow"
 const SERVICE_WORLD_STATE: StringName = &"service.world_state"
 const SERVICE_SPAWN: StringName = &"service.spawn"
 const SERVICE_OBJECTIVE: StringName = &"service.objective"
+const SERVICE_INPUT: StringName = &"service.input"
 
 # --- Core module identifiers ---------------------------------------------
 # Feature modules declare these in their manifest. Core is not listed: it is
@@ -50,6 +76,9 @@ const SERVICE_OBJECTIVE: StringName = &"service.objective"
 const MODULE_ENTITY: StringName = &"module.entity"
 const MODULE_CHARACTER: StringName = &"module.character"
 const MODULE_LOCOMOTION: StringName = &"module.locomotion"
+const MODULE_INPUT: StringName = &"module.input"
+const MODULE_CAMERA: StringName = &"module.camera"
+const MODULE_ANIMATION: StringName = &"module.animation"
 const MODULE_STATS: StringName = &"module.stats"
 const MODULE_HEALTH: StringName = &"module.health"
 const MODULE_INVENTORY: StringName = &"module.inventory"

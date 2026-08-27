@@ -9,10 +9,10 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 + M1 complete ✅
+## Status: M0 + M1 + M2 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
-runtime entity on top of it. Both are green.
+runtime entity on top of it. M2 makes that entity a playable character. All three are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -49,10 +49,38 @@ runtime entity on top of it. Both are green.
 - *Capabilities are configured from data, not subclassed* — `..::test_capabilities_are_configured_from_definition_data`
 - *Entity state round-trips* — `test_entity_persistence.gd::test_entity_state_round_trips`
 
+### M2 — Character + Input + Locomotion ✅
+
+| M2 deliverable | Where |
+| --- | --- |
+| CharacterBody3D scene | `character/character.tscn` |
+| InputRouter | `input/input_router.gd` |
+| MovementComponent | `locomotion/movement_component.gd` |
+| MovementProfile | `locomotion/movement_profile.gd` |
+| Camera adapter | `camera/camera_adapter.gd` |
+| AnimationTree adapter | `animation/animation_adapter.gd` |
+| CharacterDefinition | `character/character_definition.gd` |
+| Default input bindings | `input/default_input_bindings.gd` |
+
+**M2 exit gate:**
+
+- *Walk, sprint, crouch and jump* — `test_character.gd::test_walking_from_input`,
+  `..::test_sprinting_from_input`, `..::test_crouching_from_input`, `..::test_jumping_from_input`
+- *Input contexts switch cleanly* —
+  `..::test_handing_control_between_two_characters_leaves_one_driver`
+- *AI can issue movement commands* — `..::test_an_ai_and_a_player_reach_the_same_velocity`,
+  `..::test_a_character_still_moves_with_no_controller_at_all`
+
 ```
-14 suite(s), 228 test(s), 228 passed, 0 failed, 453 assertions
+24 suite(s), 465 test(s), 465 passed, 0 failed, 883 assertions
 RESULT: PASS
 ```
+
+Enabling the addon binds the framework's semantic actions to WASD, space, shift, ctrl, E and
+the usual gamepad equivalents, for any action the project has not already defined. It never
+overwrites: rebind `jump` and it stays rebound through every future version of the addon.
+Without this the addon produces a character that compiles, spawns, validates and cannot move —
+and an unbound action is indistinguishable from an unpressed one at runtime.
 
 ---
 
@@ -84,10 +112,10 @@ Layer 0  Core contracts      registry / settings / events / results     addons/u
 Layer 1  Definitions         "what is it?"           Resource          core/contracts/
 Layer 2  Entity scenes       "what exists?"          PackedScene       entity/definition_binder.gd
 Layer 3  Capabilities        "what can it do?"       child Node        entity/framework_component.gd
-Layer 4  Feature modules     "how does it work?"     module folder     (M2+)
+Layer 4  Feature modules     "how does it work?"     module folder     locomotion/ character/ input/
 Layer 5  Services            "what persists?"        registered Object core/registry/
 Layer 6  Communication       signals / bus / groups                    core/event_bus.gd
-Layer 7  Presentation        animation / UI / audio / VFX              (M2+)
+Layer 7  Presentation        animation / UI / audio / VFX              animation/ camera/
 Layer 8  Network authority   optional adapter                          (M18)
 ```
 
@@ -180,6 +208,29 @@ rather than in `_ready()`, and `test_core_is_usable_before_ready_runs` pins that
 `PersistentIdentity` generates its id lazily for the same reason — an entity spawned and
 serialised inside one frame would otherwise have no id.
 
+**Node exports in a hand-written `.tscn` need a `node_paths` declaration.** Writing
+`movement = NodePath("../MovementComponent")` under a node is not enough — Godot stores it as a
+literal `NodePath` value and the typed export stays null. The node header has to name the
+properties to resolve:
+
+```
+[node name="CharacterController" type="Node" parent="." node_paths=PackedStringArray("movement", "camera")]
+```
+
+The failure is silent: the scene loads, the character moves, and nothing animates. `test_character_scene.gd`
+asserts every wired export in `character.tscn`, because a `.tscn` is the one part of a
+composition-first design that no unit test otherwise touches.
+
+**A component must not disable its own processing in `_ready()`.** Godot readies children in tree
+order, so a `DefinitionBinder` sitting above a component initialises it *before* that component's
+own `_ready()` runs. A bare `set_physics_process(false)` there switches the character off after
+the binder has just switched it on — and only for some node orders, which makes it look like a
+scene-layout bug. Every M2 component recomputes the condition instead:
+
+```gdscript
+set_physics_process(is_initialized() and auto_tick and body != null)
+```
+
 **Also:** `Node3D.global_transform` is only legal inside the tree. `EntitySerializer` falls back
 to the local transform when an entity is captured before it is parented, rather than erroring
 and silently recording identity. The test harness yields one frame before running so its nodes
@@ -212,6 +263,29 @@ addons/universal_gameplay/
 │   ├── entity_serializer.gd       capture / restore across an entity
 │   ├── entity_factory.gd          spawn from definition, rebuild from record
 │   └── entity_module.gd           the Entity module manifest
+├── input/
+│   ├── input_source.gd            where raw action state is read from
+│   ├── engine_input_source.gd     the only place that touches Godot's Input
+│   ├── input_context.gd           which actions are live, as a definition
+│   ├── input_contexts.gd          the six standard contexts
+│   ├── input_router.gd            the context stack. a service, not an autoload
+│   └── default_input_bindings.gd  WASD and a gamepad, so the addon works enabled
+├── locomotion/
+│   ├── movement_profile.gd        speeds, acceleration, jump. reusable data
+│   ├── movement_intent.gd         what something wants, with no idea who asked
+│   ├── movement_solver.gd         all the maths. static, no node, no physics
+│   └── movement_component.gd      the one API every driver shares
+├── camera/
+│   ├── camera_profile.gd          view mode, framing, look limits, FOV
+│   ├── camera_solver.gd           look clamping and boom placement
+│   └── camera_adapter.gd          drives a rig. works without one
+├── animation/
+│   ├── animation_profile.gd       semantic state -> AnimationTree parameters
+│   └── animation_adapter.gd       observes movement. never writes back
+├── character/
+│   ├── character_definition.gd    a scene plus the profiles that configure it
+│   ├── character_controller.gd    player input -> movement. one driver of many
+│   └── character.tscn             the shared character scene
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -233,13 +307,13 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 is done. The build order follows dependency, not feature appeal.
+M0 through M2 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | M10 | Factions + reputation |
 | **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
-| M2 | Character + input + locomotion | | M12 | Crafting + survival |
+| **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
 | M3 | Stats + health + damage + effects | | M13 | Vehicles |
 | M4 | Items + inventory + equipment | | M14 | Spawn + world state + traffic |
 | M5 | Interaction platform | | M15 | Crime / heat |
@@ -256,7 +330,9 @@ architecture is wrong and gets fixed before more systems land.
 
 ## The rules that actually bite
 
-The full rulebooks live in the source documents. These are the ones that change what you type:
+The full rulebooks live in [`docs/`](docs/) — the [Implementation Plan](docs/implementation-plan.md)
+and the [Ontology Rulebook](docs/ontology-rulebook.md), with the original `.docx` kept in
+[`docs/source/`](docs/source/). These are the ones that change what you type:
 
 1. **Core is infrastructure.** It owns lifecycle, config, registries and contracts. Never
    `apply_damage()`, `buy_item()` or `complete_quest()`.
