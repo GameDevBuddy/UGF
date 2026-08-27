@@ -78,7 +78,12 @@ func initialize(entity_context: EntityContext) -> void:
 	# same router.
 	if _router == null:
 		_router = _resolve_router()
-	_input_context = _resolve_input_context()
+	# Never while controlling. Replacing the context object mid-control strands
+	# the instance already on the router's stack: release_control() removes by
+	# instance, so it would take the new one, miss, and leave the old one
+	# pushed forever -- one context deeper per re-initialisation.
+	if not _controlling:
+		_input_context = _resolve_input_context()
 	if control_on_bind:
 		take_control()
 

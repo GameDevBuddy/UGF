@@ -51,17 +51,24 @@ func get_prompt() -> String:
 
 ## The interactor's inventory, when it has one. Null is a normal answer: a
 ## creature with no bag can still open a door.
+##
+## Falls back to searching the interactor's own components, the same way
+## [method get_target_state] does. Not every context is built by an
+## [InteractorComponent] — a seat checking its requirements builds a bare one,
+## and without the fallback an item requirement on it could never be met by
+## anybody, which reads as the requirement being broken rather than the context
+## being thin.
 func get_interactor_inventory() -> InventoryComponent:
-	if interactor_component != null:
+	if interactor_component != null and interactor_component.inventory != null:
 		return interactor_component.inventory
-	return null
+	return _find_inventory(interactor)
 
 
 ## The interactor's stats, when it has any.
 func get_interactor_stats() -> StatsComponent:
-	if interactor_component != null:
+	if interactor_component != null and interactor_component.stats != null:
 		return interactor_component.stats
-	return null
+	return _find_stats(interactor)
 
 
 ## The target's semantic states, when it has any. What a state requirement
@@ -77,6 +84,24 @@ func get_interactor_state() -> SemanticState:
 	if interactor_component != null and interactor_component.semantic_state != null:
 		return interactor_component.semantic_state
 	return _find_state(interactor)
+
+
+func _find_inventory(node: Node) -> InventoryComponent:
+	if node == null:
+		return null
+	for component in DefinitionBinder.collect_components(node):
+		if component is InventoryComponent:
+			return component as InventoryComponent
+	return null
+
+
+func _find_stats(node: Node) -> StatsComponent:
+	if node == null:
+		return null
+	for component in DefinitionBinder.collect_components(node):
+		if component is StatsComponent:
+			return component as StatsComponent
+	return null
 
 
 func _find_state(node: Node) -> SemanticState:
