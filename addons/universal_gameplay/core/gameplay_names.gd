@@ -47,6 +47,17 @@ const STATE_FLEEING: StringName = &"state.fleeing"
 const STATE_OPEN: StringName = &"state.open"
 const STATE_LOCKED: StringName = &"state.locked"
 
+## Set while anything with seats has somebody aboard: a car, a lift, a horse.
+## What a guard reacts to and what stops a vehicle being despawned.
+const STATE_OCCUPIED: StringName = &"state.occupied"
+
+## Set while a vehicle's engine is running. Separate from occupied, because a
+## car left idling outside a bank is the point of leaving it idling.
+const STATE_ENGINE_RUNNING: StringName = &"state.engine.running"
+
+## Set while a vehicle is under its own power and moving.
+const STATE_DRIVING: StringName = &"state.driving"
+
 # --- Semantic interaction verbs ------------------------------------------
 #
 # What an interaction is, independent of the prose shown for it. Presentation
@@ -132,6 +143,9 @@ const EVENT_ATTITUDE_CHANGED: StringName = &"attitude_changed"
 const EVENT_ITEM_PURCHASED: StringName = &"item_purchased"
 const EVENT_ITEM_SOLD: StringName = &"item_sold"
 const EVENT_LOOT_GENERATED: StringName = &"loot_generated"
+const EVENT_VEHICLE_ENTERED: StringName = &"vehicle_entered"
+const EVENT_VEHICLE_EXITED: StringName = &"vehicle_exited"
+const EVENT_VEHICLE_DESTROYED: StringName = &"vehicle_destroyed"
 
 # --- AI activity names ---------------------------------------------------
 #

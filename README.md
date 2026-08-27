@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M12 complete ✅
+## Status: M0 – M13 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -17,7 +17,7 @@ that other systems change, and a way to die. M4 gives it things to carry and wea
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
-an economy. M12 lets it be lived in. All thirteen are green.
+an economy. M12 lets it be lived in. M13 gives it something to drive. All fourteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -323,6 +323,70 @@ naming each other in `StringName` literals is a graph that rots quietly: a modul
 feature goes missing in a way that reads like a content bug. Verified by deliberately adding a
 bogus dependency and watching the suite name it.
 
+### M13 — Vehicles ✅
+
+| M13 deliverable | Where |
+| --- | --- |
+| VehicleDefinition | `vehicles/vehicle_definition.gd`, `handling_profile.gd` |
+| Controller adapter | `vehicles/vehicle_controller_adapter.gd`, `vehicle_body_adapter.gd` |
+| Seats | `vehicles/seat_definition.gd`, `seat_component.gd` |
+| Enter / exit | `vehicles/enter_vehicle_action.gd` |
+| Fuel | `vehicles/fuel_component.gd` |
+| Damage | `health_damage/` — reused unchanged |
+| Storage | `inventory/` — reused unchanged |
+| Camera contexts | `camera/camera_profile.gd`, `input/input_contexts.gd` |
+| Driving maths | `vehicles/vehicle_solver.gd` |
+| Shipped scene | `vehicles/vehicle.tscn` |
+
+**M13 exit gate:**
+
+- *Player and AI drive through the same adapter* —
+  `test_vehicle_possession.gd::test_a_player_and_an_ai_reach_the_same_adapter`
+- *An AI drives somewhere* —
+  `test_vehicle_possession.gd::test_an_ai_drives_a_vehicle_to_a_destination`
+- *Vehicle persists* — `test_vehicle_component.gd::test_a_vehicle_survives_a_save`,
+  `test_seat_component.gd::test_a_restored_occupant_is_put_back_in_their_own_seat`
+- *Possession does not leak input contexts* —
+  `test_vehicle_possession.gd::test_the_context_stack_does_not_grow_across_a_round_trip`
+
+```
+75 suite(s), 1835 test(s), 1835 passed, 0 failed, 4531 assertions
+RESULT: PASS
+```
+
+**`VehicleControllerAdapter` is the whole milestone.** Implementation Plan 22 requires that the
+framework own identity, seats, fuel, damage, storage, upgrades, cameras and possession while the
+concrete motion implementation stays replaceable — so six calls (`set_throttle`, `set_brake`,
+`set_steering`, `set_handbrake`, `get_speed`, `get_motion_state`) are the entire surface between
+them. The base class is not abstract: it integrates the handling profile and moves nothing, which
+is a complete and honest implementation for a headless server, a replay and a test.
+`VehicleBodyAdapter` is the one file that touches the physics server, and a project wanting
+`VehicleBody3D` writes one more like it and changes nothing else.
+
+**Possession is a handover, not an identity change.** Nobody is reparented, nothing is hidden, no
+entity is destroyed and rebuilt. The character's controller lets go of its input context and the
+vehicle's takes one; the character's AI stops thinking and the vehicle's starts. Every step is
+optional, so a plain `Node3D` with no controller and no brain gets in perfectly well (rule 31).
+The order matters and is tested: the character releases *before* the vehicle takes, because two
+controllers holding contexts for one player leaves the stack permanently one deep.
+
+**Damage, storage and upgrades are borrowed whole.** A car is wrecked through the same
+`DamageReceiverComponent` a person is shot through; its boot is an `InventoryComponent` with a
+different `InventoryProfile`; a turbo is an item with an `EquipmentProfile` granting a stat. All
+three are tested by using them, not by asserting they exist. `VehicleDefinition` names those
+fields `inventory` and `loadout` rather than the plan's `storage` and `upgrades` — those are the
+property names the existing components resolve by, and a field nothing ever reads is worse than
+no field at all. That trap caught three fields in this milestone before the tests did.
+
+`VehicleSolver` is static and node-free like `MovementSolver` before it, so "a car will not
+pirouette while stationary", "braking never reverses you through the stop" and "reversing inverts
+the steering" are unit tests that run in microseconds rather than things you find out by driving.
+
+M13 also hardened the test runner. A test file that failed to compile was skipped **silently** and
+the run still printed `RESULT: PASS` — see the findings below.
+
+---
+
 ---
 
 ## Running the tests
@@ -495,6 +559,43 @@ to prove a script is sound — `test_script_compilation.gd` passed while `Wallet
 method shadowing `Object._set` with a different signature. `can_instantiate()` is false for a
 script that did not compile, and asserting on it names the file. Verified by deliberately
 breaking a script and watching the suite fail.
+
+**A test file that fails to compile is skipped silently, and the run still says PASS.** The
+runner checked `load(path) != null` before calling `script.new()` — but `load()` returns a
+`GDScript` even when it did not compile, and calling `new()` on that is a *runtime* error, which
+aborts `run_script()` before it can record the failure. So the suite vanished from the run and
+`RESULT: PASS` printed anyway. `can_instantiate()` fixes it, the same way it fixed
+`test_script_compilation.gd`. Verified by adding a deliberately broken test file and watching the
+run go red and name it. **This is the same trap twice; assume it is everywhere `load()` is
+followed by `new()`.**
+
+**`get_move_vector()` returns forward as *negative* y.** It matches Godot's screen-space
+convention so the value drops into a camera basis without a sign flip at every call site — which
+is right for movement and wrong for anything that is not a basis. `VehicleControllerComponent`
+took it raw and pressing W reversed the car. The tell is that the test failure reads
+`Expected -1.0 but got 0.7`, which looks like a magnitude problem and is a sign problem.
+
+**Re-initialising a controller that holds a pushed input context strands the old one.** Contexts
+are removed by instance, not by id, because two players both on foot push contexts with the same
+id. So a second `initialize()` that rebuilds `_input_context` leaves the pushed instance
+unreachable: release removes the new object, misses, and the stack is one deeper forever. Both
+`CharacterController` and `VehicleControllerComponent` now refuse to replace the context while
+controlling. It surfaced as a stack that grew by exactly one across five round trips in and out
+of a car.
+
+**`"some_method" in some_object` is false even when the method exists.** The `in` operator tests
+*properties*. `FuelComponent` used it to detect `get_starting_fuel()` on a definition and the
+check was dead on the very class that declares it. `has_method()` for methods, `in` for
+properties.
+
+**A field the framework declares but nothing resolves is worse than no field.** `VehicleDefinition`
+shipped `maximum_health`, `storage` and `upgrades`, all authored, all validated, none of them
+read: `HealthComponent` takes its maximum from its own export, and `InventoryComponent` and
+`EquipmentComponent` resolve by looking for properties called `inventory` and `loadout`. Content
+authors would have set three numbers that did nothing. Two were fixed by renaming to the property
+the consumer already looks for; the third needed the vehicle to carry it across, because
+`HealthComponent` should not learn what a car is. Worth a grep every time a definition gains a
+field.
 
 **`_set` is a Godot virtual, and it is the most natural name in the world for a private
 setter.** `Object._set(StringName, Variant) -> bool` exists on everything, and declaring
@@ -773,6 +874,23 @@ addons/universal_gameplay/
 │   ├── dialogue_component.gd      hangs one off an NPC
 │   ├── talk_action.gd             press E on the NPC. M5's pipeline, reused
 │   └── dialogue_event_adapter.gd  the seam that promotes a choice to the bus
+├── vehicles/
+│   ├── vehicle_solver.gd          driving maths. static, no node, no body
+│   ├── handling_profile.gd        speed, response, steering, thirst
+│   ├── seat_definition.gd         one place somebody can be, and what they may do
+│   ├── vehicle_definition.gd      scene, seats, handling, fuel, boot, upgrades
+│   ├── vehicle_controller_adapter.gd  the six calls. the boundary, not a wrapper
+│   ├── vehicle_body_adapter.gd    the only file here touching the physics server
+│   ├── seat_component.gd          who is aboard. saved by id, never by path
+│   ├── fuel_component.gd          what is in the tank
+│   ├── vehicle_component.gd       engine, clock, and the one command API
+│   ├── vehicle_controller_component.gd  the player driving. deletable
+│   ├── vehicle_ai_driver.gd       traffic driving. same four calls
+│   ├── enter_vehicle_action.gd    press E on the car. M5's pipeline, reused
+│   ├── vehicle_event_adapter.gd   the seam that promotes a theft to the bus
+│   ├── vehicle_event.gd           …as a cross-feature fact
+│   ├── vehicle.tscn               the shipped composition
+│   └── vehicles_module.gd         the module manifest
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -794,14 +912,14 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M12 are done. The build order follows dependency, not feature appeal.
+M0 through M13 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | **M10** | **Factions + reputation** ✅ |
 | **M1** | **Entity + save identity** ✅ | | **M11** | **Commerce + vendors + loot** ✅ |
 | **M2** | **Character + input + locomotion** ✅ | | **M12** | **Crafting + survival** ✅ |
-| **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
+| **M3** | **Stats + health + damage + effects** ✅ | | **M13** | **Vehicles** ✅ |
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |

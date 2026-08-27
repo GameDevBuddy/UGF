@@ -53,6 +53,20 @@ func run_script(path: String) -> void:
 		load_errors.append("Could not load test script: %s" % path)
 		return
 
+	# load() returns a GDScript object even when the script failed to compile,
+	# so a null check proves nothing -- the same trap that let a WalletComponent
+	# method shadowing Object._set past test_script_compilation.gd.
+	#
+	# Here it was worse than a false negative. Calling new() on a script that
+	# did not compile is a *runtime* error, which aborts run_script() before it
+	# can record anything, so the whole suite was skipped silently and the run
+	# still printed RESULT: PASS. A test file with a typo in it was invisible.
+	if not script.can_instantiate():
+		load_errors.append(
+			"%s failed to compile -- check the output above for a Parse Error." % path
+		)
+		return
+
 	var probe: Variant = script.new()
 	if not (probe is FrameworkTestCase):
 		load_errors.append("%s does not extend FrameworkTestCase." % path)

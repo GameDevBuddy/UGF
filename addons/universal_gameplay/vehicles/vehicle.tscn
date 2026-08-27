@@ -1,0 +1,108 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/definition_binder.gd" id="1_binder"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/persistent_identity.gd" id="2_identity"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/semantic_state.gd" id="3_state"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/health_damage/health_component.gd" id="4_health"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/health_damage/damage_receiver_component.gd" id="5_receiver"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/vehicle_body_adapter.gd" id="6_adapter"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/fuel_component.gd" id="7_fuel"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/seat_component.gd" id="8_seats"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/vehicle_component.gd" id="9_vehicle"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/camera/camera_adapter.gd" id="10_camera"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/vehicle_controller_component.gd" id="11_driver"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/navigation_adapter.gd" id="12_navigation"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/vehicle_ai_driver.gd" id="13_ai_driver"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/inventory/inventory_component.gd" id="14_storage"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/interaction/interaction_component.gd" id="15_interaction"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/perceivable.gd" id="16_perceivable"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/vehicles/vehicle_event_adapter.gd" id="17_events"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(2, 1.4, 4.4)
+
+[node name="Vehicle" type="CharacterBody3D"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("BoxShape3D_body")
+
+[node name="CameraYaw" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+
+[node name="CameraPitch" type="Node3D" parent="CameraYaw"]
+
+[node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch"]
+
+[node name="PersistentIdentity" type="Node" parent="."]
+script = ExtResource("2_identity")
+id_prefix = "vehicle"
+
+[node name="SemanticState" type="Node" parent="."]
+script = ExtResource("3_state")
+
+[node name="HealthComponent" type="Node" parent="."]
+script = ExtResource("4_health")
+maximum_health = 600.0
+
+[node name="DamageReceiverComponent" type="Node" parent="." node_paths=PackedStringArray("health")]
+script = ExtResource("5_receiver")
+health = NodePath("../HealthComponent")
+
+[node name="VehicleBodyAdapter" type="Node" parent="." node_paths=PackedStringArray("body")]
+script = ExtResource("6_adapter")
+body = NodePath("..")
+
+[node name="FuelComponent" type="Node" parent="."]
+script = ExtResource("7_fuel")
+
+[node name="SeatComponent" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
+script = ExtResource("8_seats")
+semantic_state = NodePath("../SemanticState")
+
+[node name="VehicleComponent" type="Node" parent="." node_paths=PackedStringArray("adapter", "fuel", "seats", "health", "semantic_state")]
+script = ExtResource("9_vehicle")
+adapter = NodePath("../VehicleBodyAdapter")
+fuel = NodePath("../FuelComponent")
+seats = NodePath("../SeatComponent")
+health = NodePath("../HealthComponent")
+semantic_state = NodePath("../SemanticState")
+
+[node name="CameraAdapter" type="Node" parent="." node_paths=PackedStringArray("yaw_pivot", "pitch_pivot", "camera")]
+script = ExtResource("10_camera")
+yaw_pivot = NodePath("../CameraYaw")
+pitch_pivot = NodePath("../CameraYaw/CameraPitch")
+camera = NodePath("../CameraYaw/CameraPitch/Camera3D")
+
+[node name="VehicleControllerComponent" type="Node" parent="." node_paths=PackedStringArray("vehicle", "camera")]
+script = ExtResource("11_driver")
+vehicle = NodePath("../VehicleComponent")
+camera = NodePath("../CameraAdapter")
+
+[node name="NavigationAdapter" type="Node" parent="." node_paths=PackedStringArray("body")]
+script = ExtResource("12_navigation")
+body = NodePath("..")
+
+[node name="VehicleAIDriver" type="Node" parent="." node_paths=PackedStringArray("vehicle", "navigation")]
+script = ExtResource("13_ai_driver")
+vehicle = NodePath("../VehicleComponent")
+navigation = NodePath("../NavigationAdapter")
+
+[node name="InventoryComponent" type="Node" parent="."]
+script = ExtResource("14_storage")
+
+[node name="InteractionComponent" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
+script = ExtResource("15_interaction")
+semantic_state = NodePath("../SemanticState")
+
+[node name="Perceivable" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
+script = ExtResource("16_perceivable")
+semantic_state = NodePath("../SemanticState")
+
+[node name="VehicleEventAdapter" type="Node" parent="." node_paths=PackedStringArray("seats", "vehicle")]
+script = ExtResource("17_events")
+seats = NodePath("../SeatComponent")
+vehicle = NodePath("../VehicleComponent")
+
+[node name="DefinitionBinder" type="Node" parent="."]
+script = ExtResource("1_binder")
