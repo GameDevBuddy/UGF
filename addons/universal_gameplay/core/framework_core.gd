@@ -80,6 +80,12 @@ func bootstrap(p_settings: FrameworkSettings = null) -> ValidationResult:
 
 	result.merge(settings.validate())
 
+	# Modules first. Definitions are scanned and validated afterwards so a
+	# definition belonging to a module can be validated by a service that
+	# module registered, rather than by nothing.
+	if settings.register_enabled_modules:
+		result.merge(FrameworkBootstrapper.install(self, settings))
+
 	if settings.scan_definitions_on_bootstrap:
 		for path in settings.definition_paths:
 			if not path.is_empty():

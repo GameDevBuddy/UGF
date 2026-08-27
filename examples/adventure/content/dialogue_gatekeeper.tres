@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="DialogueDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/dialogue_definition.gd" id="1_dialogue"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/line_node.gd" id="2_line"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/narrative_action.gd" id="3_narrative"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/end_node.gd" id="4_end"]
+
+[sub_resource type="Resource" id="Action_told"]
+script = ExtResource("3_narrative")
+operation = 0
+key = &"example.flag.gatekeeper_warned"
+value = true
+
+[sub_resource type="Resource" id="Node_greeting"]
+script = ExtResource("2_line")
+id = &"greeting"
+enter_actions = Array[Resource]([SubResource("Action_told")])
+next = &"farewell"
+speaker = &"example.actor.gatekeeper"
+text = "The cellar's dark as pitch. Take a lantern before you go down."
+
+[sub_resource type="Resource" id="Node_farewell"]
+script = ExtResource("4_end")
+id = &"farewell"
+outcome = &"warned"
+
+[resource]
+script = ExtResource("1_dialogue")
+id = &"example.dialogue.gatekeeper"
+display_name = "The Gatekeeper"
+nodes = Array[Resource]([SubResource("Node_greeting"), SubResource("Node_farewell")])
+start_node = &"greeting"
+default_speaker = &"example.actor.gatekeeper"
+repeatable = true

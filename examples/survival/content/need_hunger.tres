@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="NeedDefinition" format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/survival/need_definition.gd" id="1_need"]
+
+[resource]
+script = ExtResource("1_need")
+id = &"example.need.hunger"
+display_name = "Hunger"
+maximum = 100.0
+starting_value = 100.0
+decay_per_second = 0.25
+drains_towards = 0.0
+low_fraction = 0.3
+critical_fraction = 0.1
+low_state = &"state.hungry"
+critical_state = &"state.starving"
+damage_per_second = 0.5
+damage_tags = Array[StringName]([&"damage.true"])

@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="MissionDefinition" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/missions/mission_definition.gd" id="1_mission"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/missions/objective_definition.gd" id="2_objective"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/missions/event_matcher.gd" id="3_matcher"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/missions/narrative_reward.gd" id="4_reward"]
+
+[sub_resource type="Resource" id="Match_gatekeeper"]
+script = ExtResource("3_matcher")
+field = &"dialogue_id"
+mode = 0
+value = &"example.dialogue.gatekeeper"
+
+[sub_resource type="Resource" id="Match_lantern"]
+script = ExtResource("3_matcher")
+field = &"item_id"
+mode = 0
+value = &"example.item.lantern"
+
+[sub_resource type="Resource" id="Objective_ask"]
+script = ExtResource("2_objective")
+id = &"example.objective.ask_the_gatekeeper"
+display_name = "Ask the gatekeeper about the cellar"
+kind = &"objective.talk"
+description = "He knows what is down there."
+event_name = &"dialogue_completed"
+matchers = Array[Resource]([SubResource("Match_gatekeeper")])
+required_count = 1
+
+[sub_resource type="Resource" id="Objective_lantern"]
+script = ExtResource("2_objective")
+id = &"example.objective.find_a_lantern"
+display_name = "Find a lantern"
+kind = &"objective.acquire"
+description = "Anything that burns will do."
+event_name = &"item_acquired"
+matchers = Array[Resource]([SubResource("Match_lantern")])
+required_count = 1
+count_field = &"quantity"
+
+[sub_resource type="Resource" id="Reward_flag"]
+script = ExtResource("4_reward")
+operation = 0
+key = &"example.flag.ready_for_the_cellar"
+value = true
+
+[resource]
+script = ExtResource("1_mission")
+id = &"example.mission.light_the_cellar"
+display_name = "Light the Cellar"
+description = "Talk to the gatekeeper, then find something to light your way."
+objectives = Array[Resource]([SubResource("Objective_ask"), SubResource("Objective_lantern")])
+sequential = true
+completes_automatically = true
+rewards = Array[Resource]([SubResource("Reward_flag")])

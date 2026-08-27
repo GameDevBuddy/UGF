@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/items/item_definition.gd" id="1_item"]
+[ext_resource type="PackedScene" path="res://addons/universal_gameplay/items/item_pickup.tscn" id="2_pickup"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/survival/consumable_profile.gd" id="3_consumable"]
+
+[sub_resource type="Resource" id="Consumable_berries"]
+script = ExtResource("3_consumable")
+restores_needs = Array[StringName]([&"example.need.hunger"])
+restore_amounts = Array[float]([25.0])
+health = 0.0
+
+[resource]
+script = ExtResource("1_item")
+id = &"example.item.dried_berries"
+display_name = "Dried Berries"
+tags = Array[StringName]([&"item.food"])
+scene = ExtResource("2_pickup")
+category = &"item.consumable"
+max_stack = 20
+weight = 0.05
+base_value = 4.0
+consumable = SubResource("Consumable_berries")

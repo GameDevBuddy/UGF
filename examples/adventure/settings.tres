@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="FrameworkSettings" format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/core/framework_settings.gd" id="1_settings"]
+
+[resource]
+script = ExtResource("1_settings")
+definition_paths = Array[String](["res://examples/adventure/content"])
+enabled_modules = Dictionary[StringName, bool]({
+&"module.character": true,
+&"module.dialogue": true,
+&"module.entity": true,
+&"module.input": true,
+&"module.interaction": true,
+&"module.inventory": true,
+&"module.items": true,
+&"module.locomotion": true,
+&"module.missions": true,
+&"module.narrative": true,
+&"module.save": true
+})
+register_enabled_modules = true
+strict_validation = false
+validate_on_bootstrap = true
+scan_definitions_on_bootstrap = true
+verbose_logging = false

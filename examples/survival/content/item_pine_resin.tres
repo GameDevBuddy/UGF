@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/items/item_definition.gd" id="1_item"]
+[ext_resource type="PackedScene" path="res://addons/universal_gameplay/items/item_pickup.tscn" id="2_pickup"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"example.item.pine_resin"
+display_name = "Pine Resin"
+tags = Array[StringName]([&"item.material"])
+scene = ExtResource("2_pickup")
+category = &"item.material"
+max_stack = 10
+weight = 0.1
+base_value = 3.0

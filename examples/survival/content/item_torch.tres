@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/items/item_definition.gd" id="1_item"]
+[ext_resource type="PackedScene" path="res://addons/universal_gameplay/items/item_pickup.tscn" id="2_pickup"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"example.item.torch"
+display_name = "Torch"
+tags = Array[StringName]([&"item.tool"])
+scene = ExtResource("2_pickup")
+category = &"item.tool"
+max_stack = 1
+weight = 0.8
+base_value = 12.0
+max_durability = 60.0
+breaks_when_worn_out = true
