@@ -21,6 +21,18 @@ extends EntityDefinition
 ## Containers filter on this; it is coarser than [member tags] on purpose.
 @export var category: StringName = &""
 
+## How scarce this is, as a semantic id: [code]rarity.common[/code],
+## [code]rarity.legendary[/code].
+##
+## [b]A StringName, not an enum.[/b] Every game invents its own ladder --
+## four tiers, seven tiers, named after metals, named after nothing -- and an
+## enum would force all of them into one shape and require a framework release
+## to add a tier (rule 32).
+##
+## Empty means unclassified, which is the honest default: the framework ships
+## no rarity vocabulary because the framework ships no content (rule 29).
+@export var rarity: StringName = &""
+
 @export_group("Stacking")
 ## How many fit in one stack. One means it never stacks.
 @export_range(1, 9999) var max_stack: int = 1

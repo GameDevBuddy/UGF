@@ -45,23 +45,64 @@ func get_total_weight() -> float:
 ## Rolls the table. Returns pairs of item id and quantity, not instances,
 ## because building an [ItemInstance] needs a definition registry and a table
 ## should be rollable without one (rule 33).
-func roll(rng: RandomNumberGenerator) -> Array[Dictionary]:
+func roll(
+	rng: RandomNumberGenerator,
+	narrative: Object = null,
+	rarity_of: Callable = Callable()
+) -> Array[Dictionary]:
 	var dropped: Array[Dictionary] = []
 	for entry in get_guaranteed():
-		if entry.passes_chance(rng):
+		if entry.is_eligible(narrative) and entry.passes_chance(rng):
 			_add(dropped, entry, rng)
 
-	var pool := get_weighted()
+	# Ineligible entries are removed from the pool rather than skipped when
+	# picked. Skipping would make an excluded entry still consume a roll, so a
+	# table would drop less the more conditions it carried -- which reads as
+	# "the loot got worse" and is very hard to trace back to a flag.
+	var pool: Array[LootEntry] = []
+	for entry in get_weighted():
+		if entry.is_eligible(narrative):
+			pool.append(entry)
+
 	for pick in rolls:
 		if pool.is_empty():
 			break
-		var entry := _pick(pool, rng)
+		var entry := _pick_weighted(pool, rng, rarity_of)
 		if entry == null:
 			continue
 		_add(dropped, entry, rng)
 		if not allows_duplicates:
 			pool.erase(entry)
 	return dropped
+
+
+## Picks one entry, scaling each weight by its item's rarity.
+##
+## [param rarity_of] answers "how scarce is this item id?" and returns a
+## multiplier. It is a [Callable] rather than a registry reference because a
+## table must stay rollable with no registry at all (rule 33) -- pass nothing
+## and rarity simply does not apply.
+func _pick_weighted(
+	pool: Array[LootEntry], rng: RandomNumberGenerator, rarity_of: Callable
+) -> LootEntry:
+	var weights: Array[float] = []
+	var total := 0.0
+	for entry in pool:
+		var weight := entry.weight
+		if rarity_of.is_valid():
+			weight *= maxf(0.0, float(rarity_of.call(entry.get_drop_id())))
+		weights.append(weight)
+		total += weight
+
+	if total <= 0.0:
+		return null
+	var target := rng.randf() * total if rng != null else 0.0
+	var running := 0.0
+	for index in pool.size():
+		running += weights[index]
+		if target < running:
+			return pool[index]
+	return pool[pool.size() - 1]
 
 
 func validate() -> ValidationResult:
@@ -128,22 +169,12 @@ func _add(
 		if existing["item_id"] == entry.item_id:
 			existing["quantity"] += quantity
 			return
-	dropped.append({"item_id": entry.item_id, "quantity": quantity})
+	dropped.append({
+		"item_id": entry.item_id,
+		"currency_id": entry.currency_id,
+		"quantity": quantity,
+	})
 
-
-func _pick(pool: Array, rng: RandomNumberGenerator) -> LootEntry:
-	var total := 0.0
-	for entry in pool:
-		total += (entry as LootEntry).weight
-	if total <= 0.0:
-		return null
-	var target := (rng.randf() if rng != null else 0.0) * total
-	var running := 0.0
-	for entry in pool:
-		running += (entry as LootEntry).weight
-		if target < running:
-			return entry as LootEntry
-	return pool.back() as LootEntry
 
 ## Every item and sub-table this pool can produce.
 ##
@@ -152,8 +183,12 @@ func _pick(pool: Array, rng: RandomNumberGenerator) -> LootEntry:
 func get_referenced_ids() -> Array[StringName]:
 	var ids: Array[StringName] = []
 	for entry in entries:
-		if entry != null and entry.item_id != &"":
+		if entry == null:
+			continue
+		if entry.item_id != &"":
 			ids.append(entry.item_id)
+		if entry.currency_id != &"":
+			ids.append(entry.currency_id)
 	for table_id in sub_tables:
 		if table_id != &"":
 			ids.append(table_id)

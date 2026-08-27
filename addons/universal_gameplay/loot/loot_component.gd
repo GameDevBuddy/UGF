@@ -9,6 +9,12 @@ extends FrameworkComponent
 
 ## Emitted when the table is rolled, with what came out.
 signal loot_generated(instances: Array[ItemInstance])
+## Emitted when a roll produced money, mapping currency id to amount.
+##
+## Separate from [signal loot_generated] rather than mixed into it: an item
+## list containing something that is not an item would make every existing
+## listener check what it got.
+signal currency_generated(amounts: Dictionary)
 
 ## What drops. Takes precedence over the definition's.
 @export var table_override: LootTableDefinition
@@ -27,6 +33,24 @@ signal loot_generated(instances: Array[ItemInstance])
 @export var rolls_on_death: bool = true
 
 @export var health: HealthComponent
+
+## Consulted for entries gated on narrative flags. Left null, a conditional
+## entry is ineligible rather than free: a condition that cannot be evaluated
+## has not been met.
+@export var narrative: NarrativeStateService
+
+## Multiplier per rarity id, applied to an entry's weight.
+##
+## [b]Empty is the normal case and means rarity does not bias anything.[/b]
+## The framework ships no rarity vocabulary (rule 29), so it cannot ship
+## sensible numbers for one either. A project that wants legendaries at a
+## hundredth of their listed weight says so here, once, per table owner.
+@export var rarity_weights: Dictionary[StringName, float] = {}
+
+## Where currency drops go. Left null, a money drop is still reported on
+## [signal currency_generated] and simply lands nowhere -- which is the right
+## behaviour for a corpse in a project with no Commerce module (rule 31).
+@export var wallet: WalletComponent
 
 var _table: LootTableDefinition = null
 var _rolled: bool = false
@@ -87,7 +111,15 @@ func generate() -> FrameworkResult:
 
 	_rolled = true
 	var instances: Array[ItemInstance] = []
+	var currency: Dictionary[StringName, int] = {}
 	for drop in _roll_with_sub_tables(_table, get_rng(), 0):
+		var currency_id: StringName = drop.get("currency_id", &"")
+		if currency_id != &"":
+			var amount := int(drop["quantity"])
+			currency[currency_id] = int(currency.get(currency_id, 0)) + amount
+			if wallet != null:
+				wallet.deposit(currency_id, float(amount))
+			continue
 		var definition := _resolve_item(drop["item_id"])
 		if definition == null:
 			# Content naming an item that is not registered. Skipping the line
@@ -104,6 +136,10 @@ func generate() -> FrameworkResult:
 		instances.append(instance)
 
 	loot_generated.emit(instances)
+	if not currency.is_empty():
+		currency_generated.emit(currency)
+	# The payload stays the item list so existing callers are unaffected; the
+	# currency arrives on its own signal and in the wallet.
 	return FrameworkResult.ok(instances)
 
 
@@ -142,7 +178,7 @@ func _on_died(_context: DamageContext) -> void:
 func _roll_with_sub_tables(
 	table: LootTableDefinition, rng: RandomNumberGenerator, depth: int
 ) -> Array[Dictionary]:
-	var dropped := table.roll(rng)
+	var dropped := table.roll(rng, narrative, _rarity_weight)
 	if depth >= 4:
 		push_warning(
 			"LootComponent: table '%s' nests more than four deep; stopping." % table.id
@@ -153,6 +189,17 @@ func _roll_with_sub_tables(
 		if sub != null:
 			dropped.append_array(_roll_with_sub_tables(sub, rng, depth + 1))
 	return dropped
+
+
+## How much a rarity scales an entry's weight. One when unconfigured, so a
+## table with no rarity table behaves exactly as it did before rarity existed.
+func _rarity_weight(item_id: StringName) -> float:
+	if rarity_weights.is_empty():
+		return 1.0
+	var definition := _resolve_item(item_id)
+	if definition == null or definition.rarity == &"":
+		return 1.0
+	return float(rarity_weights.get(definition.rarity, 1.0))
 
 
 func _resolve_item(item_id: StringName) -> ItemDefinition:
