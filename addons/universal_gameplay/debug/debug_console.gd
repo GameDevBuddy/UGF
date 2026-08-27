@@ -35,6 +35,10 @@ var _commands: Dictionary[StringName, DebugCommand] = {}
 var _history: PackedStringArray = PackedStringArray()
 
 
+## Command sources kept alive on the console's behalf. See [method retain].
+var _owners: Array[RefCounted] = []
+
+
 func _ready() -> void:
 	register_builtins()
 
@@ -64,6 +68,23 @@ func add(
 	mutates: bool = false
 ) -> FrameworkResult:
 	return register(DebugCommand.create(name, handler, summary, usage, mutates))
+
+
+## Keeps [param owner] alive for as long as this console is.
+##
+## [b]A command is a [Callable], and a Callable does not own the object behind
+## it.[/b] Registering commands from a [DebugCommandPack] built inline --
+## [code]InventoryDebugCommands.new(bag, core).register_into(console)[/code] --
+## creates a [RefCounted] that is freed the moment the statement ends, leaving
+## every command it registered pointing at nothing. The console then reports
+## "give has nothing behind it", which reads like a registration bug and is
+## really a lifetime one.
+##
+## So the console holds what it was handed. That is the honest ownership: the
+## commands belong to it now.
+func retain(owner: RefCounted) -> void:
+	if owner != null and not _owners.has(owner):
+		_owners.append(owner)
 
 
 func unregister(name: StringName) -> bool:

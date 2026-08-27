@@ -166,7 +166,9 @@ instantiated by the catalog, not referenced globally), and events have none
 
 | Class | Extends | Summary |
 | --- | --- | --- |
+| `AIInspector` | `RefCounted` | The plan's AI Debug Panel: brain state, target, perception facts and path. |
 | `DebugCommand` | `RefCounted` | One thing a console can do. |
+| `DebugCommandPack` | `RefCounted` | A module's own console cheats, registered by the project that wants them. |
 | `DebugConsole` | `Node` | Runs typed commands. |
 | `EntityInspector` | `RefCounted` | Reports what an entity actually is at runtime. |
 | `EventMonitor` | `Node` | A live feed of everything crossing the EventBus. |
@@ -233,6 +235,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `FactionHostilityProvider` | `HostilityProvider` | Answers the AI's hostility question from faction standing. |
 | `FactionPriceAdapter` | `RefCounted` | Turns faction standing into a price multiplier. |
 | `FactionService` | `FrameworkService` | Who feels what about whom, and what that means. |
+| `FactionsDebugCommands` | `DebugCommandPack` | The plan's "change faction" cheat. |
 
 ## `gathering/`
 
@@ -284,6 +287,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | Class | Extends | Summary |
 | --- | --- | --- |
 | `InventoryComponent` | `FrameworkComponent` | The capability of carrying things. |
+| `InventoryDebugCommands` | `DebugCommandPack` | The plan's "spawn item" cheat, living in the module it cheats at. |
 | `InventoryEventAdapter` | `FrameworkComponent` | Promotes "something went in the bag" to a cross-feature fact. |
 | `InventoryProfile` | `Resource` | What one container can hold: how much, and what kind. |
 
@@ -323,6 +327,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `MissionReward` | `Resource` | Something a mission gives back. |
 | `MissionRuntime` | `RefCounted` | One mission, in progress. |
 | `MissionService` | `FrameworkService` | Owns every mission in flight, and is the only thing listening to the bus. |
+| `MissionsDebugCommands` | `DebugCommandPack` | The plan's "start mission" cheat, plus the two that make it useful. |
 | `NarrativeReward` | `MissionReward` | Pays in story: a flag raised, a counter bumped, standing shifted. |
 | `ObjectiveDefinition` | `FrameworkDefinition` | One thing a mission asks for. |
 | `ObjectiveRuntime` | `RefCounted` | One objective, in progress. |
@@ -389,6 +394,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `StatDefinition` | `FrameworkDefinition` | What one stat is: its range, whether it depletes, and how it comes back. |
 | `StatModifier` | `Resource` | One change to one stat, and where it came from. |
 | `StatsComponent` | `FrameworkComponent` | The capability of having numbers that other systems modify. |
+| `StatsDebugCommands` | `DebugCommandPack` | The plan's "set stat" cheat. |
 | `StatsProfile` | `Resource` | The set of stats one kind of entity has, and what its bases are. |
 
 ## `status_effects/`
@@ -449,6 +455,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `VehicleDefinition` | `FrameworkDefinition` | What a vehicle is: scene, seats, handling, fuel, storage, camera, upgrades. |
 | `VehicleEventAdapter` | `FrameworkComponent` | Promotes getting in, getting out and getting wrecked to cross-feature facts. |
 | `VehicleSolver` | `RefCounted` | Pure driving maths: how speed and heading change under throttle, brake and steering. |
+| `VehiclesDebugCommands` | `DebugCommandPack` | The plan's "enter vehicle" cheat. |
 
 ## `world/`
 
