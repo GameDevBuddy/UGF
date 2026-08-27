@@ -9,11 +9,12 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M3 complete ✅
+## Status: M0 – M4 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
-that other systems change, and a way to die. All four are green.
+that other systems change, and a way to die. M4 gives it things to carry and wear. All five
+are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -89,8 +90,23 @@ that other systems change, and a way to die. All four are green.
 - *Modifiers stack predictably* — `test_stat_calculator.gd::test_additive_percentages_sum_rather_than_compound`,
   `..::test_the_result_does_not_depend_on_the_order_they_were_added`
 
+### M4 — Items + Inventory + Equipment ✅
+
+| M4 deliverable | Where |
+| --- | --- |
+| ItemDefinition / ItemInstance | `items/item_definition.gd`, `item_instance.gd` |
+| Containers, stacking, transfer | `inventory/inventory_component.gd` |
+| Equipment slots | `equipment/equipment_slot_definition.gd` |
+| Loadouts | `equipment/loadout_profile.gd` |
+| Pickup scene | `items/item_pickup.tscn` |
+
+**M4 exit gate:**
+
+- *World pickup → inventory → equip → drop round trip* —
+  `test_equipment.gd::test_world_pickup_to_inventory_to_equip_to_drop`
+
 ```
-29 suite(s), 630 test(s), 630 passed, 0 failed, 1146 assertions
+32 suite(s), 734 test(s), 734 passed, 0 failed, 1386 assertions
 RESULT: PASS
 ```
 
@@ -320,6 +336,19 @@ addons/universal_gameplay/
 │   ├── status_effect_definition.gd  buffs and poisons as data
 │   ├── status_effect_instance.gd    one live application
 │   └── status_effect_component.gd   apply, stack, expire, tick
+├── items/
+│   ├── item_definition.gd         what an item is. shared, immutable
+│   ├── item_instance.gd           one stack: count, condition, enchantments
+│   ├── item_pickup.gd             an item lying in the world
+│   └── item_pickup.tscn           the pickup scene
+├── inventory/
+│   ├── inventory_profile.gd       slots, weight, category filters
+│   └── inventory_component.gd     one container. transfers are atomic
+├── equipment/
+│   ├── equipment_profile.gd       where an item goes and what it grants
+│   ├── equipment_slot_definition.gd  one place a thing can be worn
+│   ├── loadout_profile.gd         which slots, and what is worn to start
+│   └── equipment_component.gd     wearing things, sourced per instance
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -341,7 +370,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M3 are done. The build order follows dependency, not feature appeal.
+M0 through M4 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -349,7 +378,7 @@ M0 through M3 are done. The build order follows dependency, not feature appeal.
 | **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
 | **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
-| M4 | Items + inventory + equipment | | M14 | Spawn + world state + traffic |
+| **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
 | M5 | Interaction platform | | M15 | Crime / heat |
 | M6 | Combat + weapons | | M16 | Full persistence |
 | M7 | AI + NPC roles | | M17 | UI framework + debug tooling |

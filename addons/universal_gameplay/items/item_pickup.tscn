@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/definition_binder.gd" id="1_binder"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/entity/persistent_identity.gd" id="2_identity"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/items/item_pickup.gd" id="3_pickup"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_reach"]
+radius = 0.6
+
+[node name="ItemPickup" type="Node3D"]
+
+[node name="Area3D" type="Area3D" parent="."]
+monitoring = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+shape = SubResource("SphereShape3D_reach")
+
+[node name="PersistentIdentity" type="Node" parent="."]
+script = ExtResource("2_identity")
+
+[node name="ItemPickup" type="Node" parent="."]
+script = ExtResource("3_pickup")
+
+[node name="DefinitionBinder" type="Node" parent="."]
+script = ExtResource("1_binder")
