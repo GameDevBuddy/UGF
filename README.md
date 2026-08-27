@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M14 complete ✅
+## Status: M0 – M15 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -18,7 +18,7 @@ it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
 an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills it with
-people without making it slow. All fifteen are green.
+people without making it slow. M15 gives it a law. All sixteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -453,6 +453,70 @@ exactly the way a loaded one is rather than by a second path that drifts.
 
 ---
 
+### M15 — Crime + Heat ✅
+
+| M15 deliverable | Where |
+| --- | --- |
+| Crime events | `crime_heat/crime_definition.gd`, `crime_context.gd` |
+| Witness reporting | `crime_heat/witness_component.gd` |
+| Wanted tiers | `crime_heat/wanted_tier.gd`, `heat_profile.gd`, `heat_service.gd` |
+| Law response hooks | `crime_heat/wanted_hostility_provider.gd`, `crime_ai_adapter.gd` |
+| Faction consequences | `crime_heat/crime_faction_adapter.gd` |
+| Deaths become crimes | `crime_heat/combat_crime_adapter.gd` |
+
+**M15 exit gate:**
+
+- *No module Crime layers on mentions it* —
+  `test_crime_dependencies.gd::test_no_module_crime_layers_on_top_of_mentions_it`
+- *A killing becomes a crime without Combat knowing* —
+  `test_crime_dependencies.gd::test_a_killing_becomes_a_crime_without_combat_knowing`
+- *A wanted actor becomes an enemy of the law* —
+  `test_crime_dependencies.gd::test_a_wanted_actor_becomes_an_enemy_of_the_law`
+- *The whole milestone is deletable* —
+  `test_crime_dependencies.gd::test_everything_still_works_with_no_crime_module_installed`
+
+```
+82 suite(s), 2051 test(s), 2051 passed, 0 failed, 6328 assertions
+RESULT: PASS
+```
+
+**Combat needed no change at all for this milestone. Not one line.** That is the exit gate, and it
+is asserted directly: a test reads every source file in `combat/`, `ai/`, `factions/` and
+`health_damage/` and fails if any of them names a crime, a heat service or a wanted level. Verified
+by adding one such mention to `CombatComponent` and watching the suite name the file.
+
+The cycle being avoided is real and easy to walk into. The obvious design has `HealthComponent`
+call a crime service on death — and then Combat depends on Crime, Crime depends on Factions,
+Factions is consumed by AI, and AI issues the attacks. Instead:
+
+- **A killing becomes murder** because `CombatCrimeAdapter` subscribes to `actor_died`, a fact
+  Combat has published since M3 whether or not anybody is listening.
+- **A guard attacks a fugitive** because `CrimeAIAdapter` hands it a `WantedHostilityProvider`
+  through the `HostilityProvider` seam AI declared back in M7. That provider *wraps* whatever is
+  already installed rather than replacing it, so adding a law system does not make every policeman
+  forget who its enemies already were — and uninstalling it restores the politics rather than the
+  framework default.
+- **Standing moves** because `CrimeFactionAdapter` pushes it through `FactionService`'s existing
+  public API.
+
+All three adapters live in `crime_heat/` and all three are deletable.
+
+**The only thing law AI ever sees is a semantic state.** A guard's brain asks whether somebody is
+`state.wanted`; it never asks what their heat is, which faction is annoyed, or what they did. The
+numbers can be retuned without touching a behaviour (rule 32).
+
+**`HeatService` has no dependency on Factions at all.** Reputation is entirely
+`CrimeFactionAdapter`'s, which means a project can have a wanted level with no social system behind
+it. That split also fixed a double-charge: `FactionService.propagate_reputation` already applies the
+direct cost *and* spreads it, so a service that also spent reputation itself billed the offender
+twice for one crime.
+
+A crime nobody witnessed is not a crime, and silencing a witness is deleting a component, blinding
+it, or setting a state on it — none of which the law has to know about. That is the whole of a
+stealth game's escape hatch, and it is one `silenced_by` array.
+
+---
+
 ---
 
 ## Running the tests
@@ -643,6 +707,13 @@ to prove a script is sound — `test_script_compilation.gd` passed while `Wallet
 method shadowing `Object._set` with a different signature. `can_instantiate()` is false for a
 script that did not compile, and asserting on it names the file. Verified by deliberately
 breaking a script and watching the suite fail.
+
+**`FactionService` relations are directional, and that is deliberate.** `set_relation(a, b, v)`
+keys on `"a>b"`, so setting police→thieves leaves thieves→police untouched. A one-sided grudge is a
+real thing and the framework models it, but the failure mode when you forget is quiet: the attitude
+resolves to NEUTRAL and whatever depended on hostility simply does not fire. It cost an M15 test a
+debugging session — the assertion read as a crime-system bug and was a fixture setting one
+direction.
 
 **A freed instance cannot even be *assigned* to a typed local.** `var node: Node = dict[key]`
 throws `Trying to assign invalid previously freed instance` — before `is_instance_valid(node)` on
@@ -996,6 +1067,20 @@ addons/universal_gameplay/
 │   ├── spawn_anchor.gd            a doorway, a lay-by. bucketed by region
 │   ├── spawn_service.gd           tops up what is awake, and nothing else
 │   └── spawn_module.gd            the module manifest
+├── crime_heat/
+│   ├── crime_definition.gd        what counts as a crime, and how bad
+│   ├── crime_context.gd           one thing somebody did, and who saw it
+│   ├── wanted_tier.gd             one rung. a semantic state, not a number
+│   ├── heat_profile.gd            the ladder, and how quickly it cools
+│   ├── heat_service.gd            heat and tiers. knows nothing of factions
+│   ├── witness_component.gd       somebody who will tell. silence-able
+│   ├── wanted_hostility_provider.gd  the law, through M7's own seam
+│   ├── crime_ai_adapter.gd        hands it to a guard. wraps, never replaces
+│   ├── combat_crime_adapter.gd    actor_died becomes murder. combat unchanged
+│   ├── crime_faction_adapter.gd   every reputation consequence, in one place
+│   ├── crime_event_adapter.gd     the seam that promotes a warrant to the bus
+│   ├── crime_event.gd             …as a cross-feature fact
+│   └── crime_module.gd            the module manifest
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -1017,7 +1102,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M14 are done. The build order follows dependency, not feature appeal.
+M0 through M15 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -1026,7 +1111,7 @@ M0 through M14 are done. The build order follows dependency, not feature appeal.
 | **M2** | **Character + input + locomotion** ✅ | | **M12** | **Crafting + survival** ✅ |
 | **M3** | **Stats + health + damage + effects** ✅ | | **M13** | **Vehicles** ✅ |
 | **M4** | **Items + inventory + equipment** ✅ | | **M14** | **Spawn + world state + traffic** ✅ |
-| **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
+| **M5** | **Interaction platform** ✅ | | **M15** | **Crime / heat** ✅ |
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
 | **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
 | **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
