@@ -44,7 +44,7 @@ Two worked examples are in [`examples/`](examples/), and neither contains a line
 
 ---
 
-## Status: complete — M0 through M19 ✅
+## Status: M0 – M19 complete, plus the §36 slice gates and a spec audit ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -56,6 +56,12 @@ an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills 
 people without making it slow. M15 gives it a law. M16 makes all of it
 survive being switched off. M17 lets you see any of it. M18 lets a server
 decide it. M19 makes the whole thing something you can install. All twenty are green.
+
+**Then the milestones ran out and the specification had not.** The plan's §36
+Vertical Slice Gates had never been run, and an audit of every feature
+specification in §12–§30 against the code found 23 things the milestone roadmap
+simply did not cover — including a whole Progression system. Both are now done;
+see *After the roadmap* below.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -819,6 +825,95 @@ dead links, and a save-schema number that moved without anyone writing down how 
 
 ---
 
+## After the roadmap
+
+Finishing M19 finished the *milestone roadmap*. It did not finish the
+*specification*, and the difference was worth a day's work to find out.
+
+### The §36 vertical slice gates
+
+The plan gates breadth on five slices that prove modules **compose**, as
+distinct from each passing its own tests. None had ever been run.
+
+| Slice | Chain | Where |
+| --- | --- | --- |
+| A — Adventure | move → interact → pickup → dialogue → mission → save | `test_slice_adventure.gd` |
+| B — Shooter RPG | weapon → damage → loot → equip → XP/reputation → mission | `test_slice_shooter_rpg.gd` |
+| C — Survival | gather → craft → consume → needs/status → persistence | `test_slice_survival.gd` |
+| D — GTA sandbox | vehicle → drive → vendor → crime → faction/AI → save | `test_slice_sandbox.gd` |
+| E — Full hybrid | every module active, no sibling dependency violations | `test_slice_hybrid.gd` |
+
+**Slice E paid for the whole exercise.** Its structural gate resolves every
+class name and every `res://` path in every module folder to the folder that
+declares it, and fails when a module reaches into a sibling its
+`ModuleManifest` never declared. It found **20 real violations**.
+
+The worst: `module.missions` declared `requires = []` while `area_trigger.gd`
+literally `extends FrameworkComponent`. Missions cannot *parse* without Entity,
+and `docs/modules.md` — generated from that manifest — had been telling every
+project it needed nothing. `module.items` declared no optional dependencies at
+all while `ItemDefinition` carries a typed export from four siblings.
+`module.character` named twelve.
+
+None of them break in this repository, because the addon always ships all 34
+folders. They break for the project that installs the addon and enables a
+subset, which is the entire audience rule 36 is written for.
+
+The gate then caught three of *my own* violations as I wrote the code below —
+Loot reaching for `NarrativeStateService` and `WalletComponent`, Combat reaching
+for `AnimationEventRelay` and `PerceptionComponent`. That is the check working
+on live code rather than on history, which is the only real evidence a guard is
+worth keeping.
+
+**Slice C found a genuine bug in shipped code.** `InventoryComponent._store()`
+takes ownership of the instance handed to it and zeroes its quantity when the
+stack merges into an existing one, so `CraftingComponent.crafted` reported the
+*second* batch of anything as zero. M12's own test only ever crafted into an
+empty bag — the one path where the bug cannot appear.
+
+### The specification audit
+
+Eleven agents read §12–§30 against the code, and every claimed gap went to an
+independent agent whose only job was to **refute** it by finding the
+implementation under a different name. That mattered: **10 of 33 claims were
+false positives**, caught by the refuters rather than by me. 23 survived, and
+all 23 are now closed.
+
+| What was missing | Why it mattered |
+| --- | --- |
+| **Progression** — XP tracks, levels, skill points, perk unlocks | §12 specifies it; no milestone listed it, so it was never built |
+| Interaction and craft bus events | Both modules had local signals and nothing listening, so the plan's InteractWith and CraftItem objectives had no route to a mission |
+| `damaged_by` and interaction perception facts | An NPC could not learn who shot it from cover |
+| Validation runner wiring | `check_references` and `find_cycles` shipped in M0, were correct, and were **never called** — a clean report because nothing looked |
+| Derived stats | No way to say "carry weight is twice strength" |
+| Loot rarity, conditions, currency | All probability, no predicate, and nothing that knew what a coin was |
+| Durability degradation | `breaks_when_worn_out` was read by nothing but its own validator |
+| Stock policies: generated, rotating | |
+| Console cheats ×5, AI debug panel | Shipped as per-module packs, so the console still imports nothing |
+| Charge fire, aim/ADS state | |
+| Block, parry, dodge, poise, stagger | |
+| Animation-event hit windows, weapon hurtboxes, lock-on targeting | |
+| Companion role, dialogue feature commands | |
+
+### A gate that cannot fail is not a gate
+
+The five slices were written, then adversarially reviewed — and the review
+judged **two of them unsound**. A drive test where coasting alone satisfied the
+handbrake assertion. A hostility check that short-circuited before it ever
+consulted the reputation the test claimed to prove. Mission objectives checked
+against `StringName`s the test had authored itself, where ten separate mutations
+to the framework left it green.
+
+All 27 findings were fixed and each proved by breaking the path it now covers.
+The pass is worth recording for two things it got right beyond the fixes: one
+agent **rejected** a reviewer's suggested geometry pin on measurement — 0.13 m
+of headroom over eight runs — rather than shipping something that would flake in
+CI; and the recheck pass caught two fixes that fell short, including a
+requirement-closure loop that stayed a tautology while its comment claimed
+otherwise.
+
+---
+
 ## Running the tests
 
 Requires a Godot 4.7 binary. No addons, no plugins, no package manager.
@@ -1182,6 +1277,18 @@ method that does not exist records three passes and stops. What catches it is th
 fails the build on `SCRIPT ERROR` in the output — which is the reason that step exists, and the
 reason a green suite summary is not on its own evidence that a run was clean.
 
+**A bare `Curve` enum shadows the native resource type,** and it is a parse error rather than a
+scoped name. Progression's cost curve is `CostCurve` for that reason alone.
+
+**A `Callable` does not own the object behind it.** Registering commands from an inline
+`DebugCommandPack` left every one of them pointing at a freed `RefCounted` the instant the
+statement ended, and the console reported "give has nothing behind it" — which reads like a
+registration bug and is really a lifetime one.
+
+**A freed node does not reliably compare equal to null.** This has now cost three separate
+components the same bug: leading with `if x != null and not is_instance_valid(x)` leaves a
+dangling reference looking like an absent one. Check validity first, always.
+
 **Also:** `Node3D.global_transform` is only legal inside the tree. `EntitySerializer` falls back
 to the local transform when an entity is captured before it is parented, rather than erroring
 and silently recording identity. The test harness yields one frame before running so its nodes
@@ -1529,9 +1636,13 @@ All twenty milestones are done. The build order followed dependency, not feature
 | **M8** | **Dialogue + narrative state** ✅ | | **M18** | **Networking adapter** ✅ |
 | **M9** | **Missions + objectives** ✅ | | **M19** | **Packaging + documentation** ✅ |
 
+Beyond the roadmap: the §36 vertical slice gates, and the 23 feature-spec gaps
+the roadmap did not cover. Both green.
+
 Vertical slices gate breadth: adventure, shooter RPG, survival, GTA-style sandbox, then full
-hybrid. If a slice needs a circular dependency or a game-specific hack in Core, the
-architecture is wrong and gets fixed before more systems land.
+hybrid. All five now run. None needed a circular dependency or a game-specific hack in Core —
+but the hybrid slice did find twenty undeclared sibling dependencies, which is the same
+architectural debt caught one layer earlier.
 
 ---
 
