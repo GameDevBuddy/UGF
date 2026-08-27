@@ -167,6 +167,54 @@ func test_the_weapon_is_wired_to_the_semantic_state() -> void:
 	assert_eq(weapon.semantic_state, character.get_node("SemanticState"))
 
 
+func test_the_controller_is_wired_to_the_ai() -> void:
+	var character := _spawn()
+	var controller := character.get_node("CharacterController") as CharacterController
+	assert_eq(controller.ai, character.get_node("AIControllerComponent"))
+
+
+func test_the_ai_is_wired_to_every_capability_it_drives() -> void:
+	var character := _spawn()
+	var ai := character.get_node("AIControllerComponent") as AIControllerComponent
+	assert_eq(ai.perception, character.get_node("PerceptionComponent"))
+	assert_eq(ai.movement, character.get_node("MovementComponent"))
+	assert_eq(ai.navigation, character.get_node("NavigationAdapter"))
+	assert_eq(ai.combat, character.get_node("CombatComponent"))
+	assert_eq(ai.interactor, character.get_node("InteractorComponent"))
+	assert_eq(ai.semantic_state, character.get_node("SemanticState"))
+
+
+func test_the_character_is_something_an_npc_can_notice() -> void:
+	var character := _spawn()
+	assert_true(character.is_in_group(GameplayNames.GROUP_PERCEIVABLE))
+
+
+func test_crouching_conceals_the_character() -> void:
+	# Wired in the scene rather than in code, so stealth is one exported array
+	# a project can change without touching the framework.
+	var character := _spawn()
+	var mark := character.get_node("Perceivable") as Perceivable
+	assert_almost_eq(mark.get_visibility(), 1.0)
+	(character.get_node("SemanticState") as SemanticState).add_state(
+		GameplayNames.STATE_CROUCHING
+	)
+	assert_true(mark.get_visibility() < 1.0)
+
+
+func test_perception_looks_from_the_camera_pivot() -> void:
+	var character := _spawn()
+	var perception := character.get_node("PerceptionComponent") as PerceptionComponent
+	assert_eq(perception.eyes, character.get_node("CameraYaw"))
+	assert_eq(perception.perceivable, character.get_node("Perceivable"))
+
+
+func test_a_character_with_no_role_thinks_about_nothing() -> void:
+	var character := _spawn()
+	var ai := character.get_node("AIControllerComponent") as AIControllerComponent
+	assert_null(ai.get_role())
+	assert_null(ai.get_brain())
+
+
 func test_a_character_with_no_combat_profile_simply_cannot_attack() -> void:
 	var character := _spawn()
 	var combat := character.get_node("CombatComponent") as CombatComponent

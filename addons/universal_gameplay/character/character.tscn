@@ -10,6 +10,10 @@
 [ext_resource type="Script" path="res://addons/universal_gameplay/interaction/interactor_component.gd" id="8_interactor"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/combat/weapon_component.gd" id="9_weapon"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/combat/combat_component.gd" id="10_combat"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/perceivable.gd" id="11_perceivable"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/perception_component.gd" id="12_perception"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/navigation_adapter.gd" id="13_navigation"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/ai/ai_controller_component.gd" id="14_ai"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -49,12 +53,13 @@ movement = NodePath("../MovementComponent")
 script = ExtResource("6_animation")
 movement = NodePath("../MovementComponent")
 
-[node name="CharacterController" type="Node" parent="." node_paths=PackedStringArray("movement", "camera", "interactor", "combat")]
+[node name="CharacterController" type="Node" parent="." node_paths=PackedStringArray("movement", "camera", "interactor", "combat", "ai")]
 script = ExtResource("7_controller")
 movement = NodePath("../MovementComponent")
 camera = NodePath("../CameraAdapter")
 interactor = NodePath("../InteractorComponent")
 combat = NodePath("../CombatComponent")
+ai = NodePath("../AIControllerComponent")
 
 [node name="InteractorComponent" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
 script = ExtResource("8_interactor")
@@ -69,6 +74,28 @@ script = ExtResource("10_combat")
 weapon = NodePath("../WeaponComponent")
 semantic_state = NodePath("../SemanticState")
 aim = NodePath("../CameraYaw/CameraPitch/Camera3D")
+
+[node name="Perceivable" type="Node" parent="." node_paths=PackedStringArray("semantic_state")]
+script = ExtResource("11_perceivable")
+semantic_state = NodePath("../SemanticState")
+concealing_states = Array[StringName]([&"state.movement.crouching"])
+
+[node name="PerceptionComponent" type="Node" parent="." node_paths=PackedStringArray("perceivable", "eyes")]
+script = ExtResource("12_perception")
+perceivable = NodePath("../Perceivable")
+eyes = NodePath("../CameraYaw")
+
+[node name="NavigationAdapter" type="Node" parent="."]
+script = ExtResource("13_navigation")
+
+[node name="AIControllerComponent" type="Node" parent="." node_paths=PackedStringArray("perception", "movement", "navigation", "combat", "interactor", "semantic_state")]
+script = ExtResource("14_ai")
+perception = NodePath("../PerceptionComponent")
+movement = NodePath("../MovementComponent")
+navigation = NodePath("../NavigationAdapter")
+combat = NodePath("../CombatComponent")
+interactor = NodePath("../InteractorComponent")
+semantic_state = NodePath("../SemanticState")
 
 [node name="DefinitionBinder" type="Node" parent="."]
 script = ExtResource("1_binder")
