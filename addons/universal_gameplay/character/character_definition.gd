@@ -46,6 +46,10 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## Meters this character has: hunger, thirst, fatigue, warmth. Optional, and
+## empty for almost every NPC in almost every game.
+@export var needs: Array[NeedDefinition] = []
+
 ## What this character sells, when it sells anything. Optional: most
 ## characters are not shops.
 @export var vendor: VendorDefinition
@@ -108,6 +112,9 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	for need in needs:
+		if need != null:
+			result.merge(need.validate())
 	if vendor != null:
 		result.merge(vendor.validate())
 	if loot != null:
