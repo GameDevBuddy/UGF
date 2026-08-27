@@ -195,6 +195,7 @@ const SERVICE_NARRATIVE: StringName = &"service.narrative"
 const SERVICE_FACTION: StringName = &"service.faction"
 const SERVICE_COMMERCE: StringName = &"service.commerce"
 const SERVICE_CRIME: StringName = &"service.crime"
+const SERVICE_NETWORK: StringName = &"service.network"
 
 # --- Core module identifiers ---------------------------------------------
 # Feature modules declare these in their manifest. Core is not listed: it is

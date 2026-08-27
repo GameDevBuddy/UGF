@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M17 complete ✅
+## Status: M0 – M18 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -19,7 +19,8 @@ without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
 an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills it with
 people without making it slow. M15 gives it a law. M16 makes all of it
-survive being switched off. M17 lets you see any of it. All eighteen are green.
+survive being switched off. M17 lets you see any of it. M18 lets a server
+decide it. All nineteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -641,6 +642,67 @@ opened the panel to find.
 
 ---
 
+### M18 — Networking Adapter ✅
+
+| M18 deliverable | Where |
+| --- | --- |
+| Authority facade | `networking/network_authority.gd`, `authority_policy.gd` |
+| RPC validation | `networking/network_authority.gd` (validators), the adapters' own |
+| Sync / transport adapters | `networking/network_transport.gd`, `multiplayer_transport.gd` |
+| Network identity | `networking/network_identity.gd` |
+| Inventory prototype | `networking/inventory_authority_adapter.gd` |
+| Combat prototype | `networking/combat_authority_adapter.gd` |
+
+**M18 exit gate:**
+
+- *Offline mode unchanged* —
+  `test_network_authority.gd::test_offline_a_command_runs_in_process_on_the_same_line`,
+  `test_no_module_names_anything_in_networking`
+- *Server-authoritative inventory* —
+  `test_network_authority.gd::test_a_client_sends_a_request_rather_than_acting`,
+  `test_a_peer_cannot_act_for_somebody_elses_entity`
+- *Server-authoritative combat* —
+  `test_network_authority.gd::test_shots_arriving_faster_than_the_weapon_can_fire_are_refused`
+- *One file touches Godot's multiplayer API* —
+  `test_network_authority.gd::test_only_one_file_touches_godots_multiplayer_api`
+
+```
+87 suite(s), 2203 test(s), 2203 passed, 0 failed, 8540 assertions
+RESULT: PASS
+```
+
+**Not one line changed in Inventory or Combat for this milestone.** Seventeen milestones of
+insisting every mutation be a method returning a `FrameworkResult` is what made that possible: the
+adapters register handlers that call `InventoryComponent.add()` and `CombatComponent.attack()` and
+add nothing of their own. Every module's mutation API turned out to be its networking API, which is
+the payoff the plan was aiming at when it said "define mutation APIs so an authority adapter can
+sit in front of them".
+
+**Offline is not a special case, and that is the design rather than a discipline.** The default
+transport is authoritative and the default policy owns nothing, so a command handed to
+`execute()` offline runs in-process on the same line. There is no second branch to drift out of
+step — which is why "offline mode unchanged" is asserted rather than re-verified each release. Two
+tests hold the line: no module names anything in `networking/`, and exactly one file in the whole
+addon touches `MultiplayerAPI`. Both verified by deliberately breaking them.
+
+**The policy defaults to local, not authoritative.** Everything-unless-allowed is safer on paper
+and wrong for a framework: a project installing networking would find every unlisted call silently
+stop working — including presentation — and would conclude the module was broken rather than
+strict. `AuthorityPolicy.standard()` ships the plan's list (inventory, commerce, combat, missions,
+crime, crafting, equipment) as a starting point to argue with.
+
+**A network id is not a save id.** Conflating them means either saves that break when somebody
+reconnects, or network traffic shaped like a save file. `NetworkIdentity` sits alongside
+`PersistentIdentity` and never replaces it.
+
+What crosses the wire for combat is "I fired", not "I am aiming here": aiming is client-side and
+must be, because a shooter where turning waits for a round trip is unplayable. What the server owns
+is the *result*, which is the distinction the plan draws by calling combat **results**
+authority-owned. The rate check reads the weapon's own `rate_per_second`, because the component's
+local limit runs on the machine that was modified.
+
+---
+
 ---
 
 ## Running the tests
@@ -851,6 +913,21 @@ to prove a script is sound — `test_script_compilation.gd` passed while `Wallet
 method shadowing `Object._set` with a different signature. `can_instantiate()` is false for a
 script that did not compile, and asserting on it names the file. Verified by deliberately
 breaking a script and watching the suite fail.
+
+**`extends` must immediately follow `class_name`.** Anything between them — a `const`, a `var`, a
+blank-line-and-comment — is a parse error, and the message points at the *next* line rather than
+the intrusion. Worth knowing because it makes injecting a deliberate fault to test a guard
+surprisingly easy to get wrong: two guard verifications during M18 reported hundreds of unrelated
+failures because the injection itself did not compile, which looks exactly like "the guard did not
+fire".
+
+**`Dictionary.get()` returns a `Variant`, so arithmetic on it has no inferable type.**
+`var since := Time.get_ticks_msec() - dict.get(key, 0)` fails to compile with "cannot infer the
+type", pointing at the variable rather than at the dictionary. Type the intermediate.
+
+**`@export var x: Object` is a parse error.** Export types must be built-in, a resource, a node or
+an enum. A registry parameter that genuinely accepts any object — including a plain `RefCounted` —
+has to be a plain `var` wired in code.
 
 **`FactionService` relations are directional, and that is deliberate.** `set_relation(a, b, v)`
 keys on `"a>b"`, so setting police→thieves leaves thieves→police untouched. A one-sided grudge is a
@@ -1244,6 +1321,16 @@ addons/universal_gameplay/
 │   ├── mission_presenter.gd       the quest log
 │   ├── hud_presenter.gd           so a HUD redraws once, not five times
 │   └── ui_module.gd               the module manifest
+├── networking/
+│   ├── network_identity.gd        who owns this. never the save id
+│   ├── network_intent.gd          one request. plain data, because it travels
+│   ├── authority_policy.gd        what the server owns. defaults to little
+│   ├── network_transport.gd       where intents go. offline by default
+│   ├── multiplayer_transport.gd   the only file touching MultiplayerAPI
+│   ├── network_authority.gd       the facade. a function call offline
+│   ├── inventory_authority_adapter.gd  the server in front of the bag
+│   ├── combat_authority_adapter.gd     the server in front of the trigger
+│   └── networking_module.gd       the module manifest
 ├── debug/
 │   ├── entity_inspector.gd        what is this entity, and would it persist?
 │   ├── service_inspector.gd       missions, factions, saves, spawns. names none
@@ -1270,7 +1357,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M17 are done. The build order follows dependency, not feature appeal.
+M0 through M18 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -1282,7 +1369,7 @@ M0 through M17 are done. The build order follows dependency, not feature appeal.
 | **M5** | **Interaction platform** ✅ | | **M15** | **Crime / heat** ✅ |
 | **M6** | **Combat + weapons** ✅ | | **M16** | **Full persistence** ✅ |
 | **M7** | **AI + NPC roles** ✅ | | **M17** | **UI framework + debug tooling** ✅ |
-| **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
+| **M8** | **Dialogue + narrative state** ✅ | | **M18** | **Networking adapter** ✅ |
 | **M9** | **Missions + objectives** ✅ | | M19 | Packaging + documentation |
 
 Vertical slices gate breadth: adventure, shooter RPG, survival, GTA-style sandbox, then full
