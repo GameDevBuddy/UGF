@@ -208,6 +208,19 @@ func test_perception_looks_from_the_camera_pivot() -> void:
 	assert_eq(perception.perceivable, character.get_node("Perceivable"))
 
 
+func test_the_dialogue_adapter_is_wired_to_the_conversation() -> void:
+	var character := _spawn()
+	var adapter := character.get_node("DialogueEventAdapter") as DialogueEventAdapter
+	assert_eq(adapter.dialogue, character.get_node("DialogueComponent"))
+
+
+func test_a_character_with_no_dialogue_simply_has_nothing_to_say() -> void:
+	var character := _spawn()
+	var talk := character.get_node("DialogueComponent") as DialogueComponent
+	assert_null(talk.get_dialogue())
+	assert_false(talk.can_talk())
+
+
 func test_a_character_with_no_role_thinks_about_nothing() -> void:
 	var character := _spawn()
 	var ai := character.get_node("AIControllerComponent") as AIControllerComponent

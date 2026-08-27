@@ -14,6 +14,8 @@
 [ext_resource type="Script" path="res://addons/universal_gameplay/ai/perception_component.gd" id="12_perception"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/ai/navigation_adapter.gd" id="13_navigation"]
 [ext_resource type="Script" path="res://addons/universal_gameplay/ai/ai_controller_component.gd" id="14_ai"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/dialogue_component.gd" id="15_dialogue"]
+[ext_resource type="Script" path="res://addons/universal_gameplay/dialogue/dialogue_event_adapter.gd" id="16_dialogue_events"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -96,6 +98,13 @@ navigation = NodePath("../NavigationAdapter")
 combat = NodePath("../CombatComponent")
 interactor = NodePath("../InteractorComponent")
 semantic_state = NodePath("../SemanticState")
+
+[node name="DialogueComponent" type="Node" parent="."]
+script = ExtResource("15_dialogue")
+
+[node name="DialogueEventAdapter" type="Node" parent="." node_paths=PackedStringArray("dialogue")]
+script = ExtResource("16_dialogue_events")
+dialogue = NodePath("../DialogueComponent")
 
 [node name="DefinitionBinder" type="Node" parent="."]
 script = ExtResource("1_binder")
