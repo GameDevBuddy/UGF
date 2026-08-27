@@ -67,6 +67,9 @@ instantiated by the catalog, not referenced globally), and events have none
 | `CombatHit` | `RefCounted` | One thing an attack connected with. |
 | `CombatProfile` | `Resource` | How an entity fights when nothing is in its hands. |
 | `CombatSolver` | `RefCounted` | Every piece of combat maths, as static functions on no state. |
+| `DefenseComponent` | `FrameworkComponent` | The capability of not simply standing there being hit. |
+| `DefenseDamageAdapter` | `FrameworkComponent` | Lets a defender's block, parry or dodge affect what actually lands. |
+| `DefenseProfile` | `Resource` | What a character can do about being hit: block, parry, dodge. |
 | `HitProvider` | `RefCounted` | Where combat asks the world what it just hit. |
 | `HitscanDelivery` | `AttackDelivery` | A shot that arrives the instant it is fired. |
 | `MeleeDelivery` | `AttackDelivery` | A swing: everything inside an arc, within reach. |

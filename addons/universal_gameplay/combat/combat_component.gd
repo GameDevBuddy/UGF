@@ -159,6 +159,28 @@ func clear_aim_override() -> void:
 
 # --- State ----------------------------------------------------------------
 
+## Puts the character into or out of aim-down-sights.
+##
+## [b]The state lives on the character, not in the weapon.[/b] Plan 13 is
+## explicit that aim is a character or camera state, and the reason is that
+## three separate things read it -- the weapon tightens its cone, the camera
+## narrows its field of view, the animation graph picks a different pose -- and
+## none of them should have to ask a weapon. Swapping weapons mid-aim then
+## keeps the character aiming, which is what a player expects and what a flag
+## on the weapon would get wrong.
+func set_aiming(aiming: bool) -> void:
+	if semantic_state == null:
+		return
+	if aiming:
+		semantic_state.add_state(GameplayNames.STATE_AIMING)
+	else:
+		semantic_state.remove_state(GameplayNames.STATE_AIMING)
+
+
+func is_aiming() -> bool:
+	return semantic_state != null and semantic_state.has_state(GameplayNames.STATE_AIMING)
+
+
 func is_attacking() -> bool:
 	return _swing != null
 
@@ -212,7 +234,15 @@ func can_attack(secondary: bool = false) -> FrameworkResult:
 
 
 ## Starts one attack. The one call a player, an AI and a test all make.
-func attack(secondary: bool = false) -> FrameworkResult:
+## Swings, shoots or punches.
+##
+## [param damage_scale] multiplies this one attack's damage. A charge weapon
+## passes what its release bought; everything else leaves it at one. It is an
+## argument rather than state on the component because it belongs to the swing
+## and has to be gone by the next one -- a field would survive into the
+## following attack and turn one charged shot into a permanently charged
+## weapon.
+func attack(secondary: bool = false, damage_scale: float = 1.0) -> FrameworkResult:
 	var allowed := can_attack(secondary)
 	if allowed.is_err():
 		return allowed
@@ -226,6 +256,7 @@ func attack(secondary: bool = false) -> FrameworkResult:
 	# hit anything at range. Building a context mutates nothing, so refusing
 	# below still leaves the actor exactly as it was (rule 17).
 	var context := _build_context(definition, secondary)
+	context.damage_scale = damage_scale
 	if weapon != null and weapon.has_weapon():
 		var paid := weapon.consume_shot(secondary)
 		if paid.is_err():

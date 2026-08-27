@@ -22,6 +22,20 @@ extends Resource
 ## Degrees the cone closes per second while not firing.
 @export_range(0.0, 90.0, 0.01, "or_greater") var spread_recovery_per_second: float = 4.0
 
+@export_group("Aim")
+## Spread multiplier while the character is aiming down sights.
+##
+## Applied to the accumulated cone rather than stored, because aiming is a
+## character state that can change between two shots and a stored value would
+## have to be recomputed by whoever noticed. Below one tightens the cone, which
+## is the point; one makes aiming cosmetic, which is a legitimate choice for a
+## weapon with no sights.
+@export_range(0.0, 2.0, 0.01) var aim_spread_multiplier: float = 0.35
+
+## Recoil multiplier while aiming. Usually gentler than the hip figure, and
+## occasionally worse -- a scope amplifies what the barrel does.
+@export_range(0.0, 3.0, 0.01) var aim_recoil_multiplier: float = 0.7
+
 @export_group("Recoil")
 ## Upward kick per shot.
 @export_range(0.0, 30.0, 0.01) var recoil_pitch: float = 0.4
