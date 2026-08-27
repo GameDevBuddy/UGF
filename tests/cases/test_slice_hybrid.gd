@@ -156,14 +156,30 @@ func test_every_requirement_of_every_registered_module_is_also_registered() -> v
 	for id in closed:
 		assert_true(installed.has_feature(id), "%s was asked for and did not register" % id)
 
-	# And with that set installed, the closure claim is a real question: every
-	# requirement of everything running is itself running.
-	for id in installed.get_module_ids():
-		for required in ModuleCatalog.get_manifest(id).requires:
-			assert_true(
-				installed.has_feature(required),
-				"%s is running without %s, which it requires" % [id, required]
-			)
+	# The obvious follow-up -- looping the registered set and asserting each
+	# module's requirements are also registered -- cannot fail and is not here.
+	# resolve_order already refuses any list whose requirements are not all in
+	# it, and the two assertions above pin the registered set to exactly the
+	# list. Re-deriving that from the same static table proves the table is
+	# self-consistent, which was never in doubt.
+	#
+	# These two are questions the registry can actually answer wrong.
+	assert_empty(
+		ModuleCatalog.get_implied_requirements(closed),
+		"the chosen set is closed, so nothing is missing from it"
+	)
+	for id in closed:
+		# Read off the running instance rather than the catalog. A module that
+		# built one manifest for registration and reported another afterwards
+		# would satisfy the bootstrapper and lie to everything downstream --
+		# docs/modules.md included, which is generated from exactly this call.
+		var running: FrameworkModule = installed.get_module(id)
+		assert_not_null(running, "%s registered and then could not be fetched" % id)
+		assert_eq(
+			running.get_manifest().requires,
+			ModuleCatalog.get_manifest(id).requires,
+			"%s reports different requirements once it is running" % id
+		)
 
 
 func test_two_cores_hold_the_whole_catalog_at_the_same_time() -> void:
@@ -331,11 +347,16 @@ func test_the_scan_behind_that_check_actually_read_the_addon() -> void:
 
 	# And the same for the path half, which reads different files and would
 	# otherwise be able to find nothing while looking busy.
+	# Asserted against _sources(), not against _files(). The gate iterates the
+	# composed list, so probing the helper would leave the .tscn line free to
+	# be deleted: the self-check would stay green while the gate quietly
+	# stopped reading scenes and reported no offenders forever -- exactly the
+	# failure this whole section exists to rule out.
 	var character := "%s/character/character.tscn" % ADDON_ROOT
 	assert_has(
-		_files(ADDON_ROOT, "tscn"),
+		_sources(),
 		character,
-		"character.tscn composes across more modules than anything else in the addon"
+		"the scanner's own file list does not include character.tscn"
 	)
 	assert_has(
 		_referenced_folders(FileAccess.get_file_as_string(character)),
