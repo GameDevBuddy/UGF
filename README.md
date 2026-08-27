@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M15 complete ✅
+## Status: M0 – M16 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -18,7 +18,8 @@ it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
 an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills it with
-people without making it slow. M15 gives it a law. All sixteen are green.
+people without making it slow. M15 gives it a law. M16 makes all of it
+survive being switched off. All seventeen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -514,6 +515,69 @@ twice for one crime.
 A crime nobody witnessed is not a crime, and silencing a witness is deleting a component, blinding
 it, or setting a state on it — none of which the law has to know about. That is the whole of a
 stealth game's escape hatch, and it is one `silenced_by` array.
+
+---
+
+### M16 — Full Persistence ✅
+
+| M16 deliverable | Where |
+| --- | --- |
+| Save slots | `persistence/save_slot.gd`, `save_service.gd` |
+| Autosave | `persistence/autosave_policy.gd` |
+| World / entity state | `entity/entity_record.gd`, `entity_serializer.gd` — from M1, unchanged |
+| Mission / narrative / faction state | each service's own `capture_state()` — unchanged |
+| Schema migration | `persistence/save_migration.gd`, `migration_registry.gd` |
+| Storage seam | `persistence/save_backend.gd`, `file_save_backend.gd` |
+
+**M16 exit gate:**
+
+- *Full feature-stack round-trip* —
+  `test_save_round_trip.gd::test_the_whole_feature_stack_survives_a_save`
+- *Old save migration* — `test_save_round_trip.gd::test_an_old_save_migrates_forward`,
+  `test_a_migrated_save_loads_into_the_live_world`
+- *A save loads into a different world* —
+  `test_save_round_trip.gd::test_a_second_world_can_be_loaded_into_from_the_same_save`
+- *A missing module does not make a save unloadable* —
+  `test_save_round_trip.gd::test_a_save_holding_state_for_a_missing_module_still_loads`
+
+```
+84 suite(s), 2110 test(s), 2110 passed, 0 failed, 6576 assertions
+RESULT: PASS
+```
+
+**`SaveService` serialises nothing.** Every persistent component has owned `capture_state()` and
+`restore_state()` since M1, and every persistent service owns the same pair; this walks what it
+was given and aggregates. That is why fifteen milestones have added saved state and the save
+platform has needed no change for any of them — a test asserts it directly, reading
+`save_service.gd` and failing if it names `InventoryComponent`, `HeatService`, `SeatComponent` or
+any of eight others.
+
+The round-trip test is the one that gets harder as the framework grows, so it drives real
+components rather than hand-made dictionaries: health, inventory, needs, semantic state and a
+transform on an entity; narrative flags and counters, faction reputation, wanted level and region
+population across four services. Save, wipe every one of them, load, assert all of it came back.
+It passed on the first run, which is the strongest evidence the capture/restore discipline held.
+
+**Migrations are steps, never jumps.** A save at schema 1 loading into a build at schema 4 runs
+1→2, 2→3, 3→4. Writing a 1→4 migration instead looks simpler and is the thing that rots: every new
+version would need a migration from every old one, and the count grows with the square of the
+project's age. A gap in the ladder is a registration-time error rather than a corrupt world at
+load time, and `MigrationRegistry.validate()` is meant to run in CI so a missing rung is a build
+failure rather than a support ticket.
+
+Three failure modes get their own answers rather than a shrug. A save **from the future** is
+refused — a player who downgraded is told, not silently given a broken world. A save holding state
+for a **module this build no longer has** is reported as information and left alone, because
+removing an optional module must not make existing saves unloadable (rule 31). A save naming an
+**entity that is not in the world** is likewise information, with `rebuild()` available for the
+project to decide what to respawn and where — a save service that guessed would be one deciding
+scene structure.
+
+`FileSaveBackend` is the only file here that touches the filesystem, and it writes binary rather
+than JSON: the records carry `Transform3D` and `Vector3` values, and a JSON encoder that had to
+know every type a component might save is exactly the "serialise arbitrary nodes" approach the
+plan rules out. Slot metadata is a separate small file, so a load menu renders six rows without
+deserialising six worlds.
 
 ---
 
@@ -1081,6 +1145,16 @@ addons/universal_gameplay/
 │   ├── crime_event_adapter.gd     the seam that promotes a warrant to the bus
 │   ├── crime_event.gd             …as a cross-feature fact
 │   └── crime_module.gd            the module manifest
+├── persistence/
+│   ├── save_game.gd               one whole saved world, as plain data
+│   ├── save_slot.gd               what a load menu shows without loading
+│   ├── save_migration.gd          one rung. never a jump
+│   ├── migration_registry.gd      the ladder, and a gap is a build failure
+│   ├── save_backend.gd            where saves live. in-memory by default
+│   ├── file_save_backend.gd       the only file here touching the disk
+│   ├── autosave_policy.gd         when, how often, and how many to keep
+│   ├── save_service.gd            aggregates. serialises nothing itself
+│   └── persistence_module.gd      the module manifest
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -1102,7 +1176,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M15 are done. The build order follows dependency, not feature appeal.
+M0 through M16 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -1112,7 +1186,7 @@ M0 through M15 are done. The build order follows dependency, not feature appeal.
 | **M3** | **Stats + health + damage + effects** ✅ | | **M13** | **Vehicles** ✅ |
 | **M4** | **Items + inventory + equipment** ✅ | | **M14** | **Spawn + world state + traffic** ✅ |
 | **M5** | **Interaction platform** ✅ | | **M15** | **Crime / heat** ✅ |
-| **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
+| **M6** | **Combat + weapons** ✅ | | **M16** | **Full persistence** ✅ |
 | **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
 | **M8** | **Dialogue + narrative state** ✅ | | M18 | Networking adapter |
 | **M9** | **Missions + objectives** ✅ | | M19 | Packaging + documentation |
