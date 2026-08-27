@@ -17,15 +17,27 @@ var item_id: StringName = &""
 
 var quantity: int = 0
 
-## The recipe's category, for an objective matching "craft any weapon".
+## The produced item's category, for an objective matching "craft any
+## consumable".
+##
+## The item's category rather than the recipe's: an objective asking for "any
+## weapon" is asking about the thing that came out, and a recipe's own category
+## is an authoring convenience for grouping a crafting menu.
 var category: StringName = &""
+
+## Tags from the produced item's definition, for an objective matching a
+## vocabulary rather than one id.
+var tags: Array[StringName] = []
 
 ## Who made it.
 var crafter: Node = null
 
 
 static func create(
-	p_crafter: Node, p_recipe: RecipeDefinition, p_quantity: int
+	p_crafter: Node,
+	p_recipe: RecipeDefinition,
+	p_quantity: int,
+	p_definition: ItemDefinition = null
 ) -> FrameworkEvent:
 	var event := (load(
 		"res://addons/universal_gameplay/crafting/craft_event.gd"
@@ -36,7 +48,9 @@ static func create(
 	if p_recipe != null:
 		event.recipe_id = p_recipe.id
 		event.item_id = p_recipe.output_id
-		event.category = p_recipe.category
+	if p_definition != null:
+		event.category = p_definition.category
+		event.tags = p_definition.tags.duplicate()
 	return event
 
 

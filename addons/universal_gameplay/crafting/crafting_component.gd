@@ -204,7 +204,19 @@ func _finish() -> FrameworkResult:
 			continue
 		var instance := ItemInstance.create(definition, int(output["quantity"]))
 		if inventory != null:
-			inventory.add(instance)
+			# The container takes ownership of what it is handed. When the whole
+			# stack merges into one already on the shelf, InventoryComponent
+			# does `instance.quantity -= quantity` and the caller is left
+			# holding an object that says zero -- which is why item_added emits
+			# the count as its own argument rather than trusting the instance.
+			#
+			# Reporting that object as "what came out" made the second batch of
+			# anything announce nothing, so a "craft two rations" objective
+			# never advanced. Invisible on the first batch, which was the only
+			# path M12's suite exercised.
+			var stored := inventory.add(instance)
+			if stored.is_ok() and not inventory.contains(instance):
+				instance.quantity = int(output["quantity"])
 		produced.append(instance)
 
 	crafted.emit(recipe, produced)

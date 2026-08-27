@@ -65,10 +65,12 @@ func _on_crafted(recipe: RecipeDefinition, outputs: Array[ItemInstance]) -> void
 	if not publish_crafts or _bus == null or not _bus.has_method("publish"):
 		return
 	var made := 0
+	var definition: ItemDefinition = null
 	for instance in outputs:
 		if instance != null and instance.get_definition_id() == recipe.output_id:
 			made += instance.quantity
-	var event := CraftedEvent.create(_entity_root(), recipe, made)
+			definition = instance.definition
+	var event := CraftedEvent.create(_entity_root(), recipe, made, definition)
 	_bus.call("publish", event)
 	craft_published.emit(event)
 

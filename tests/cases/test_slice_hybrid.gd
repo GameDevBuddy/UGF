@@ -1,0 +1,1023 @@
+extends FrameworkTestCase
+## Slice E of the vertical slice gates: the whole framework switched on at
+## once, and nothing inside it quietly wired to anything else.
+##
+## The other four slices each follow one story through several modules. This
+## one has no story. It asks three questions that only make sense about the
+## framework as a whole.
+##
+## [b]Does all of it come up together?[/b] Every module in the catalog in one
+## core, and a second core alongside it holding its own copy of the same set --
+## a module keeping state in a static or an autoload would work perfectly right
+## up until a project ran two worlds at once.
+##
+## [b]Is any of it wired to a sibling it never declared?[/b] This is the gate.
+## Rule 9 says cross-feature integration lives in adapters and contracts; rule
+## 36 says a dependency that exists is written down in the manifest. Neither is
+## checkable by running the code: an undeclared reference compiles and works
+## perfectly in this repository, where every module is on disk, and only breaks
+## for the project that installed half of them. So the check is structural.
+## Scan each module folder for the class names it mentions, look up which
+## folder declares each of those names, and require the manifest to admit the
+## relationship. Core is excluded, because every module may know Core.
+##
+## [b]Does one entity survive carrying all of it?[/b] Twelve modules' worth of
+## components on one [Node3D], exercised against each other and then round
+## tripped through a save. Interference is the failure this catches: damage
+## that corrupts a bag, a buff that outlives the item granting it, a character
+## that comes back from a save stronger than it went in.
+
+const CORE_SCRIPT: String = "res://addons/universal_gameplay/core/framework_core.gd"
+const BUS_SCRIPT: String = "res://addons/universal_gameplay/core/event_bus.gd"
+const ADDON_ROOT: String = "res://addons/universal_gameplay"
+
+var core: Node = null
+var bus: Node = null
+var factions: FactionService = null
+var saves: SaveService = null
+
+## Lazily built by [method _module_folders] and [method _class_folders]; the
+## structural scan reads a couple of hundred files and several tests want the
+## same answer.
+var _folders: Dictionary = {}
+var _classes: Dictionary = {}
+var _patterns: Dictionary = {}
+
+
+func before_each() -> void:
+	core = make_autoload(CORE_SCRIPT, "FrameworkCore")
+	bus = make_autoload(BUS_SCRIPT, "EventBus")
+	bus.warn_on_unregistered = false
+
+	factions = FactionFixtures.service()
+	factions.name = "FactionService"
+	add_test_node(factions)
+
+	saves = SaveService.new()
+	saves.name = "SaveService"
+	add_test_node(saves)
+	saves.configure(SaveBackend.new(), core)
+
+
+# --- Part 1: everything comes up together --------------------------------
+
+func test_every_module_the_addon_ships_comes_up_in_one_core() -> void:
+	var installed := make_autoload(CORE_SCRIPT, "HybridEverythingCore")
+
+	var result: ValidationResult = installed.bootstrap(_everything())
+
+	assert_false(
+		result.has_errors(),
+		"Enabling every shipped module at once must not error: %s" % result.format_report()
+	)
+	for id in ModuleCatalog.get_ids():
+		assert_true(
+			installed.has_feature(id),
+			"%s is in the catalog but did not register when everything was enabled" % id
+		)
+	assert_size(
+		installed.get_module_ids(),
+		ModuleCatalog.get_ids().size(),
+		"Every catalogued module should be registered exactly once"
+	)
+
+
+func test_every_requirement_of_every_registered_module_is_also_registered() -> void:
+	# The runtime half of the manifest claim. Ordering is checked elsewhere;
+	# this asserts the stronger property that the graph actually closed -- no
+	# module is running with a requirement that never made it in.
+	var installed := make_autoload(CORE_SCRIPT, "HybridClosureCore")
+	installed.bootstrap(_everything())
+
+	for id in installed.get_module_ids():
+		var module: FrameworkModule = installed.get_module(id)
+		assert_not_null(module, "%s registered but cannot be fetched back" % id)
+		var manifest := module.get_manifest()
+		assert_eq(manifest.id, id, "%s registered under a different id than it declares" % id)
+		for required in manifest.requires:
+			assert_true(
+				installed.has_feature(required),
+				"%s is running without %s, which it requires" % [id, required]
+			)
+
+
+func test_two_cores_hold_the_whole_catalog_at_the_same_time() -> void:
+	# Beyond what test_packaging asks. One full installation proves the modules
+	# coexist; two prove no module smuggled its state into a static or an
+	# autoload, which is the failure that only shows up in a project running a
+	# server world and a client world in one process (rule 2).
+	var first := make_autoload(CORE_SCRIPT, "HybridFirstCore")
+	var second := make_autoload(CORE_SCRIPT, "HybridSecondCore")
+
+	var first_result: ValidationResult = first.bootstrap(_everything())
+	var second_result: ValidationResult = second.bootstrap(_everything())
+
+	assert_false(first_result.has_errors(), first_result.format_report())
+	assert_false(
+		second_result.has_errors(),
+		"A second full installation alongside the first failed: %s"
+		% second_result.format_report()
+	)
+	for id in ModuleCatalog.get_ids():
+		assert_true(second.has_feature(id), "%s is missing from the second core" % id)
+		assert_true(
+			first.get_module(id) != second.get_module(id),
+			"%s handed the same module instance to both cores" % id
+		)
+
+
+func test_the_whole_catalog_comes_down_and_goes_back_up() -> void:
+	# Shutdown is where a module that registered something globally shows
+	# itself: the second bootstrap fails on whatever the first left behind.
+	var installed := make_autoload(CORE_SCRIPT, "HybridCycleCore")
+	installed.bootstrap(_everything())
+	assert_size(installed.get_module_ids(), ModuleCatalog.get_ids().size())
+
+	installed.shutdown()
+
+	assert_empty(installed.get_module_ids(), "Shutdown left modules registered")
+	assert_false(installed.is_bootstrapped(), "Shutdown left the core marked as bootstrapped")
+
+	var again: ValidationResult = installed.bootstrap(_everything())
+
+	assert_false(
+		again.has_errors(),
+		"Bringing everything up a second time failed: %s" % again.format_report()
+	)
+	assert_size(
+		installed.get_module_ids(),
+		ModuleCatalog.get_ids().size(),
+		"The second installation is not the same size as the first"
+	)
+
+
+# --- Part 2: no undeclared sibling dependencies --------------------------
+
+func test_no_module_reaches_into_a_sibling_it_never_declared() -> void:
+	# The gate. Every class name a module's sources mention, that another
+	# module declares, has to appear in this module's manifest as required or
+	# optional. An undeclared one is a hidden import (rule 9) and a dependency
+	# nobody wrote down (rule 36) -- and it is invisible here, where the whole
+	# addon is on disk, because it only breaks in a project that installed the
+	# one module and not the other.
+	var offenders := _undeclared_sibling_references()
+	assert_empty(
+		offenders,
+		(
+			"Modules referencing siblings their manifest does not declare:\n%s"
+			% "\n".join(offenders)
+		)
+	)
+
+
+func test_the_scan_behind_that_check_actually_read_the_addon() -> void:
+	# A structural check that finds nothing passes, whether the framework is
+	# clean or the scanner is broken. These are the assertions that tell those
+	# two apart.
+	var modules := _module_folders()
+	var classes := _class_folders()
+
+	assert_size(
+		modules,
+		ModuleCatalog.get_ids().size(),
+		"The folder map should have one entry per catalogued module"
+	)
+	assert_true(
+		classes.size() >= 150,
+		"Only %d class_name declarations were found under a module folder; the scan is broken"
+		% classes.size()
+	)
+	assert_eq(
+		modules.get("commerce", &""),
+		&"module.commerce",
+		"The catalog's script paths should map the commerce folder to its module id"
+	)
+	assert_eq(
+		classes.get("WalletComponent", ""),
+		"commerce",
+		"WalletComponent should be attributed to the folder that declares it"
+	)
+
+	for folder in modules:
+		var declared := 0
+		for owner_folder in classes.values():
+			if owner_folder == folder:
+				declared += 1
+		assert_true(
+			declared > 0,
+			"No class_name was found anywhere in the %s module; the scan missed a folder"
+			% folder
+		)
+
+
+func test_core_and_the_shared_folders_are_outside_the_check() -> void:
+	# Core is excluded on purpose: every module may know Core. So are the
+	# folders that hold no module -- attributing DefinitionValidator to a
+	# module would invent a dependency that does not exist.
+	var classes := _class_folders()
+	for shared in ["EntityContext", "FrameworkResult", "GameplayNames", "DefinitionValidator"]:
+		assert_eq(
+			classes.get(shared, ""),
+			"",
+			"%s does not live in a module folder and must not be attributed to one" % shared
+		)
+	assert_eq(
+		classes.get("FrameworkComponent", ""),
+		"entity",
+		"FrameworkComponent does live in a module folder, and Entity is that module"
+	)
+
+
+func test_the_check_names_a_reference_that_is_not_declared() -> void:
+	# The proof that the check can fail. Missions declares Entity and three
+	# optional modules and says nothing about Commerce, so a source file in
+	# that folder touching a wallet is exactly the violation this gate exists
+	# to catch.
+	var offenders := _undeclared_references_in(
+		"missions", "extends FrameworkComponent\nvar purse: WalletComponent = null\n"
+	)
+
+	assert_size(offenders, 1, "One undeclared reference should produce one report")
+	assert_true(
+		offenders[0].contains("WalletComponent"), "The report names the class: %s" % offenders[0]
+	)
+	assert_true(
+		offenders[0].contains("module.commerce"),
+		"The report names the module that owns it: %s" % offenders[0]
+	)
+
+
+func test_a_comment_naming_a_sibling_class_is_not_a_reference() -> void:
+	# Doc comments cross-reference other modules constantly -- that is what
+	# documentation is for. Scanning raw source would report every one of them
+	# and the check would have to be switched off to get a green suite.
+	var offenders := _undeclared_references_in(
+		"missions",
+		"## Rewards are paid through a WalletComponent when Commerce is present.\n"
+		+ "# var purse: WalletComponent\n"
+		+ "extends FrameworkComponent\n"
+	)
+	assert_empty(offenders, "A commented mention is documentation, not an import")
+
+
+func test_a_class_named_inside_a_string_is_not_a_reference() -> void:
+	# The other false positive: an error message or a test-facing name that
+	# happens to spell a class. Nothing is imported by writing its name in a
+	# message.
+	var offenders := _undeclared_references_in(
+		"missions", "extends FrameworkComponent\nvar note := \"needs WalletComponent\"\n"
+	)
+	assert_empty(offenders, "A class name inside a string literal is not a dependency")
+
+
+func test_a_module_referencing_its_own_classes_is_not_a_violation() -> void:
+	var offenders := _undeclared_references_in(
+		"commerce", "var purse: WalletComponent = null\nvar shop: VendorComponent = null\n"
+	)
+	assert_empty(offenders, "A module is allowed to know its own folder")
+
+
+func test_a_declared_reference_is_accepted() -> void:
+	# Inventory requires Items, so an inventory file naming ItemInstance is
+	# exactly the relationship the manifest describes.
+	var offenders := _undeclared_references_in(
+		"inventory", "func add(instance: ItemInstance) -> void:\n\tpass\n"
+	)
+	assert_empty(offenders, "A reference the manifest declares must pass")
+
+
+# --- Part 3: one entity, twelve modules ----------------------------------
+
+func test_one_entity_carries_every_capability_at_once() -> void:
+	var polymath := _polymath()
+
+	assert_size(
+		_capability_types(polymath),
+		17,
+		"The hybrid character carries seventeen capability types drawn from twelve modules"
+	)
+	for type in [
+		PersistentIdentity, SemanticState, StatsComponent, HealthComponent,
+		DamageReceiverComponent, HealthEventAdapter, StatusEffectComponent,
+		InventoryComponent, InventoryEventAdapter, EquipmentComponent, NeedsComponent,
+		ConsumerComponent, InteractorComponent, WalletComponent, FactionComponent,
+		WeaponComponent, CombatComponent,
+	]:
+		assert_not_null(
+			_find(polymath, type), "A capability failed to initialise on the hybrid character"
+		)
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"),
+		10.0,
+		0.001,
+		"Stats came up on its profile with every other module beside it"
+	)
+	assert_almost_eq(
+		_health(polymath).get_maximum(), 100.0, 0.001, "Health came up at its exported maximum"
+	)
+
+
+func test_taking_damage_moves_health_and_nothing_else() -> void:
+	var polymath := _polymath()
+	_carry(polymath, ItemFixtures.stackable(&"item.arrow", 20), 12)
+	_wallet(polymath).set_balance(&"currency.gold", 120.0)
+	_needs(polymath).set_value(&"need.hunger", 70.0)
+
+	var taken := _receiver(polymath).receive_amount(30.0)
+
+	assert_ok(taken, "A plain damage application on a fully loaded entity should succeed")
+	assert_almost_eq(_health(polymath).get_current(), 70.0, 0.001, "Health took the damage")
+	assert_eq(
+		_inventory(polymath).count(&"item.arrow"), 12, "Damage did not disturb the inventory"
+	)
+	assert_almost_eq(
+		_wallet(polymath).get_balance(&"currency.gold"), 120.0, 0.001,
+		"Damage did not disturb the purse"
+	)
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"), 70.0, 0.001, "Damage did not disturb needs"
+	)
+	assert_true(_health(polymath).is_alive(), "Thirty of a hundred is not fatal")
+
+
+func test_equipping_raises_a_stat_without_touching_health_or_needs() -> void:
+	var polymath := _polymath()
+	_needs(polymath).set_value(&"need.hunger", 55.0)
+	_health(polymath).set_current(80.0)
+	var sword := _carry(polymath, ItemFixtures.weapon(&"item.sword", 5.0), 1)
+
+	assert_ok(
+		_equipment(polymath).equip(sword), "The sword should go into the main hand"
+	)
+
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 15.0, 0.001,
+		"Equipment applied its modifier through Stats"
+	)
+	assert_true(
+		_equipment(polymath).is_equipped(&"slot.main_hand"), "The slot holds the sword"
+	)
+	assert_eq(
+		_inventory(polymath).count(&"item.sword"), 0,
+		"Equipping took the sword out of the bag rather than duplicating it"
+	)
+	assert_almost_eq(
+		_health(polymath).get_current(), 80.0, 0.001, "Equipping did not touch health"
+	)
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"), 55.0, 0.001,
+		"Equipping did not touch needs"
+	)
+
+
+func test_a_buff_and_a_worn_item_unwind_without_erasing_each_other() -> void:
+	# Two modules writing modifiers into one Stats component. The failure this
+	# catches is the common one: removing either source takes the other's
+	# bonus with it, and the character silently drifts.
+	var polymath := _polymath()
+	var sword := _carry(polymath, ItemFixtures.weapon(&"item.sword", 5.0), 1)
+	assert_ok(_equipment(polymath).equip(sword))
+
+	assert_ok(_effects(polymath).apply(_rage()), "The buff should apply")
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 22.0, 0.001,
+		"Base ten, sword five, rage seven -- both sources are live"
+	)
+
+	assert_true(_effects(polymath).remove(&"effect.rage"), "The buff comes off")
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 15.0, 0.001,
+		"Removing the buff left the sword's bonus alone"
+	)
+
+	assert_ok(_equipment(polymath).unequip(&"slot.main_hand"))
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 10.0, 0.001,
+		"Removing the sword returned the stat to its base with nothing left over"
+	)
+	assert_eq(
+		_inventory(polymath).count(&"item.sword"), 1, "And the sword went back in the bag"
+	)
+
+
+func test_growing_a_stat_does_not_reset_anything_else() -> void:
+	# The framework has no levelling module, so raising a base stat is what
+	# progression means here. It must not reach into needs, health or the bag.
+	var polymath := _polymath()
+	_carry(polymath, SurvivalFixtures.meal(&"item.ration", [&"need.hunger"], [40.0]), 2)
+	_needs(polymath).set_value(&"need.hunger", 32.0)
+	_health(polymath).set_current(64.0)
+
+	_stats(polymath).set_base(&"stat.power", 25.0)
+
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 25.0, 0.001, "The stat grew"
+	)
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"), 32.0, 0.001,
+		"Growing a stat did not refill needs"
+	)
+	assert_almost_eq(
+		_health(polymath).get_current(), 64.0, 0.001, "Growing a stat did not heal"
+	)
+	assert_eq(
+		_inventory(polymath).count(&"item.ration"), 2, "Growing a stat did not touch the bag"
+	)
+
+
+func test_eating_moves_needs_and_the_bag_and_nothing_else() -> void:
+	var polymath := _polymath()
+	var ration := SurvivalFixtures.meal(&"item.ration", [&"need.hunger"], [40.0])
+	core.get_definition_registry().register(ration)
+	_carry(polymath, ration, 3)
+	_needs(polymath).set_value(&"need.hunger", 20.0)
+	_health(polymath).set_current(72.0)
+
+	assert_ok(_consumer(polymath).consume_by_id(&"item.ration"), "The ration is edible")
+
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"), 60.0, 0.001, "The meal restored hunger"
+	)
+	assert_eq(
+		_inventory(polymath).count(&"item.ration"), 2, "And the bag is one ration lighter"
+	)
+	assert_almost_eq(
+		_health(polymath).get_current(), 72.0, 0.001, "Eating a ration is not healing"
+	)
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 10.0, 0.001, "Nor is it a buff"
+	)
+
+
+func test_attacking_hurts_the_target_and_leaves_the_attacker_intact() -> void:
+	var polymath := _polymath()
+	_carry(polymath, ItemFixtures.stackable(&"item.arrow", 20), 5)
+	_wallet(polymath).set_balance(&"currency.gold", 90.0)
+
+	var dummy := add_test_node(CombatFixtures.dummy("Dummy", Vector3.FORWARD)) as Node3D
+	CombatFixtures.assemble(dummy)
+	var provider := FakeHitProvider.new()
+	provider.wall = add_test_node(Node.new())
+	provider.targets.append(dummy)
+	_combat(polymath).set_hit_provider(provider)
+
+	assert_ok(_combat(polymath).attack(), "An unarmed punch through the shared command API")
+
+	assert_almost_eq(
+		CombatFixtures.health_of(dummy).get_current(), 95.0, 0.001, "The dummy took the punch"
+	)
+	assert_almost_eq(
+		_health(polymath).get_current(), 100.0, 0.001, "The attacker did not hurt itself"
+	)
+	assert_eq(_inventory(polymath).count(&"item.arrow"), 5, "Attacking did not spend the bag")
+	assert_almost_eq(
+		_wallet(polymath).get_balance(&"currency.gold"), 90.0, 0.001,
+		"Attacking did not spend the purse"
+	)
+
+
+func test_interacting_changes_the_door_and_not_the_actor() -> void:
+	var polymath := _polymath()
+	_carry(polymath, ItemFixtures.stackable(&"item.arrow", 20), 4)
+	var door := add_test_node(
+		InteractionFixtures.target([InteractionFixtures.door()], "Door", true)
+	)
+	InteractionFixtures.assemble(door)
+
+	var used := _interactor(polymath).begin(InteractionFixtures.interaction_of(door))
+
+	assert_ok(used, "The door is in reach and takes one verb")
+	assert_true(
+		InteractionFixtures.state_of(door).has_state(GameplayNames.STATE_OPEN),
+		"The door opened, which is the interaction's whole effect"
+	)
+	assert_false(
+		_state(polymath).has_state(GameplayNames.STATE_OPEN),
+		"The actor did not acquire the door's state"
+	)
+	assert_eq(
+		_inventory(polymath).count(&"item.arrow"), 4, "Opening a door costs nothing from the bag"
+	)
+
+
+func test_faction_standing_is_unmoved_by_what_happened_to_the_body() -> void:
+	var polymath := _polymath()
+	var bandit := add_test_node(
+		FactionFixtures.member("Bandit", &"faction.bandits", factions)
+	) as Node3D
+	FactionFixtures.assemble(bandit)
+
+	assert_true(
+		_faction(polymath).is_hostile_to(bandit),
+		"The watch and the bandits start hostile, which is the standing under test"
+	)
+
+	_receiver(polymath).receive_amount(40.0)
+	_stats(polymath).set_base(&"stat.power", 30.0)
+	assert_ok(_effects(polymath).apply(_rage()))
+
+	assert_eq(
+		_faction(polymath).get_faction(), &"faction.watch",
+		"Damage, growth and a buff do not change who somebody belongs to"
+	)
+	assert_true(
+		_faction(polymath).is_hostile_to(bandit), "Nor do they change how the bandits feel"
+	)
+
+
+func test_the_bus_hears_the_capability_that_acted_and_only_that_one() -> void:
+	# The sanctioned cross-module seam. Adapters promote local signals to bus
+	# facts, so putting an item in a bag must produce an acquisition and not a
+	# death, and dying must produce a death and not an acquisition.
+	var polymath := _polymath()
+	var acquisitions: Array[FrameworkEvent] = []
+	var deaths: Array[FrameworkEvent] = []
+	bus.subscribe(
+		GameplayNames.EVENT_ITEM_ACQUIRED,
+		func(event: FrameworkEvent) -> void: acquisitions.append(event)
+	)
+	bus.subscribe(
+		GameplayNames.EVENT_ACTOR_DIED,
+		func(event: FrameworkEvent) -> void: deaths.append(event)
+	)
+
+	_carry(polymath, ItemFixtures.stackable(&"item.arrow", 20), 6)
+
+	assert_size(acquisitions, 1, "The inventory adapter published the acquisition")
+	assert_empty(deaths, "Filling a bag is not a death")
+
+	assert_ok(_health(polymath).kill())
+
+	assert_size(deaths, 1, "The health adapter published the death")
+	assert_size(acquisitions, 1, "And dying did not publish a second acquisition")
+
+
+# --- Part 4: and all of it saves -----------------------------------------
+
+func test_every_capability_on_the_hybrid_entity_survives_a_save() -> void:
+	var ration := SurvivalFixtures.meal(&"item.ration", [&"need.hunger"], [40.0])
+	var sword_definition := ItemFixtures.weapon(&"item.sword", 5.0)
+	var registry: DefinitionRegistry = core.get_definition_registry()
+	registry.register(ration)
+	registry.register(sword_definition)
+	registry.register(_rage())
+
+	var polymath := _polymath()
+	assert_ok(saves.register_entity(polymath))
+
+	# Move every kind of state this entity owns.
+	_carry(polymath, ration, 3)
+	var sword := _carry(polymath, sword_definition, 1)
+	assert_ok(_equipment(polymath).equip(sword))
+	_health(polymath).set_current(58.0)
+	_needs(polymath).set_value(&"need.hunger", 26.0)
+	_stats(polymath).set_base(&"stat.power", 12.0)
+	assert_ok(_effects(polymath).apply(_rage()))
+	_wallet(polymath).set_balance(&"currency.gold", 73.0)
+	_state(polymath).set_state(&"state.exhausted", true)
+	_faction(polymath).set_faction(&"faction.merchants")
+	polymath.global_position = Vector3(9.0, 0.0, -4.0)
+
+	assert_ok(saves.save(&"slot_hybrid"))
+
+	# Wipe it exactly as quitting the game would.
+	_equipment(polymath).unequip_all()
+	_inventory(polymath).clear()
+	_health(polymath).set_current(100.0)
+	_needs(polymath).refill_all()
+	_stats(polymath).set_base(&"stat.power", 10.0)
+	_effects(polymath).clear()
+	_wallet(polymath).set_balance(&"currency.gold", 0.0)
+	_state(polymath).clear_states()
+	_faction(polymath).set_faction(&"faction.watch")
+	polymath.global_position = Vector3.ZERO
+	assert_true(_inventory(polymath).is_empty(), "The world is genuinely wiped")
+
+	assert_ok(saves.load_slot(&"slot_hybrid"))
+
+	assert_eq(_inventory(polymath).count(&"item.ration"), 3, "inventory")
+	var worn := _equipment(polymath).get_equipped(&"slot.main_hand")
+	assert_not_null(worn, "equipment: the sword is worn again")
+	assert_eq(
+		worn.get_definition_id() if worn != null else &"",
+		&"item.sword",
+		"equipment: and it is the same item, resolved by id"
+	)
+	assert_almost_eq(_health(polymath).get_current(), 58.0, 0.001, "health")
+	assert_almost_eq(_needs(polymath).get_value(&"need.hunger"), 26.0, 0.001, "needs")
+	assert_true(_effects(polymath).has_effect(&"effect.rage"), "status effects")
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"), 24.0, 0.001,
+		"stats: base twelve, plus the sword's five and rage's seven, each applied once"
+	)
+	assert_almost_eq(
+		_wallet(polymath).get_balance(&"currency.gold"), 73.0, 0.001, "commerce: the purse"
+	)
+	assert_true(_state(polymath).has_state(&"state.exhausted"), "semantic state")
+	assert_eq(_faction(polymath).get_faction(), &"faction.merchants", "factions")
+	assert_almost_eq(polymath.global_position.x, 9.0, 0.001, "transform")
+
+
+func test_the_round_trip_rebuilds_rather_than_reuses_the_entity() -> void:
+	# Loading into a second world is the shape a real load has: the entity
+	# that comes back is not the one that was saved. An entity whose restore
+	# depended on object identity would pass the test above and fail here.
+	var sword_definition := ItemFixtures.weapon(&"item.sword", 5.0)
+	core.get_definition_registry().register(sword_definition)
+
+	var original := _polymath()
+	assert_ok(saves.register_entity(original))
+	var sword := _carry(original, sword_definition, 1)
+	assert_ok(_equipment(original).equip(sword))
+	_health(original).set_current(41.0)
+	_wallet(original).set_balance(&"currency.gold", 17.0)
+	assert_ok(saves.save(&"slot_hybrid"))
+
+	var elsewhere := SaveService.new()
+	elsewhere.name = "OtherSaveService"
+	add_test_node(elsewhere)
+	elsewhere.configure(saves.backend, core)
+
+	var rebuilt := _polymath()
+	assert_ok(elsewhere.register_entity(rebuilt))
+
+	assert_ok(elsewhere.load_slot(&"slot_hybrid"))
+
+	assert_almost_eq(_health(rebuilt).get_current(), 41.0, 0.001, "health came back")
+	assert_true(
+		_equipment(rebuilt).is_equipped(&"slot.main_hand"), "and so did the worn sword"
+	)
+	assert_almost_eq(
+		_stats(rebuilt).get_value(&"stat.power"), 15.0, 0.001,
+		"and its modifier landed on a Stats component that never saw the original"
+	)
+	assert_almost_eq(
+		_wallet(rebuilt).get_balance(&"currency.gold"), 17.0, 0.001, "and so did the purse"
+	)
+
+
+# --- The hybrid character -------------------------------------------------
+
+## Settings enabling every module the addon ships.
+##
+## Nothing to scan and nothing to validate: what is under test is whether the
+## modules coexist, not whether a content folder is well formed.
+func _everything() -> FrameworkSettings:
+	var settings := FrameworkSettings.new()
+	for id in ModuleCatalog.get_ids():
+		settings.set_module_enabled(id, true)
+	settings.scan_definitions_on_bootstrap = false
+	settings.validate_on_bootstrap = false
+	return settings
+
+
+## One character carrying capabilities from twelve modules, initialised and in
+## the tree.
+##
+## Assembled by hand rather than from a definition because the point is the
+## combination: an entity nobody designed as a whole, with every capability the
+## framework offers hanging off one root.
+func _polymath(person_name: String = "Polymath") -> Node3D:
+	var entity := Node3D.new()
+	entity.name = person_name
+
+	# Entity: identity to save under, and the shared state vocabulary.
+	var identity := PersistentIdentity.new()
+	identity.name = "PersistentIdentity"
+	identity.persistent_id = StringName(person_name.to_lower())
+	entity.add_child(identity)
+
+	var state := SemanticState.new()
+	state.name = "SemanticState"
+	entity.add_child(state)
+
+	# Stats, Health and Status Effects.
+	var stats := StatsComponent.new()
+	stats.name = "StatsComponent"
+	stats.profile_override = ItemFixtures.stats_profile(10.0)
+	stats.auto_tick = false
+	entity.add_child(stats)
+
+	var health := HealthComponent.new()
+	health.name = "HealthComponent"
+	health.maximum_health = 100.0
+	entity.add_child(health)
+
+	var receiver := DamageReceiverComponent.new()
+	receiver.name = "DamageReceiverComponent"
+	entity.add_child(receiver)
+
+	var effects := StatusEffectComponent.new()
+	effects.name = "StatusEffectComponent"
+	effects.auto_tick = false
+	entity.add_child(effects)
+
+	# Items, Inventory and Equipment.
+	var inventory := InventoryComponent.new()
+	inventory.name = "InventoryComponent"
+	inventory.profile_override = ItemFixtures.container(20)
+	entity.add_child(inventory)
+
+	var equipment := EquipmentComponent.new()
+	equipment.name = "EquipmentComponent"
+	equipment.loadout_override = ItemFixtures.loadout()
+	entity.add_child(equipment)
+
+	# Survival.
+	entity.add_child(
+		SurvivalFixtures.needs_component([SurvivalFixtures.need(&"need.hunger", 1.0)])
+	)
+
+	var consumer := ConsumerComponent.new()
+	consumer.name = "ConsumerComponent"
+	entity.add_child(consumer)
+
+	# Interaction.
+	var interactor := InteractorComponent.new()
+	interactor.name = "InteractorComponent"
+	interactor.auto_tick = false
+	entity.add_child(interactor)
+
+	# Commerce and Factions.
+	entity.add_child(CommerceFixtures.wallet(120.0))
+
+	var allegiance := FactionComponent.new()
+	allegiance.name = "FactionComponent"
+	allegiance.faction_override = &"faction.watch"
+	allegiance.actor_id = StringName(person_name.to_lower())
+	allegiance.service = factions
+	entity.add_child(allegiance)
+
+	# Combat.
+	var weapon := WeaponComponent.new()
+	weapon.name = "WeaponComponent"
+	weapon.auto_tick = false
+	entity.add_child(weapon)
+
+	var combat := CombatComponent.new()
+	combat.name = "CombatComponent"
+	combat.profile_override = CombatFixtures.combat_profile()
+	combat.weapon = weapon
+	combat.auto_tick = false
+	entity.add_child(combat)
+
+	# The two adapters that promote local signals to bus facts. They are
+	# separate components precisely so an entity can be built without them.
+	var health_adapter := HealthEventAdapter.new()
+	health_adapter.name = "HealthEventAdapter"
+	health_adapter.event_bus = bus
+	entity.add_child(health_adapter)
+
+	var inventory_adapter := InventoryEventAdapter.new()
+	inventory_adapter.name = "InventoryEventAdapter"
+	inventory_adapter.event_bus = bus
+	entity.add_child(inventory_adapter)
+
+	add_test_node(entity)
+	var context := EntityContext.create(entity, null, core)
+	for component in DefinitionBinder.collect_components(entity):
+		component.initialize(context)
+	return entity
+
+
+## A buff, so two modules are writing modifiers into one Stats component.
+func _rage() -> StatusEffectDefinition:
+	var definition := StatusEffectDefinition.new()
+	definition.id = &"effect.rage"
+	definition.display_name = "Rage"
+	definition.duration = 30.0
+	definition.modifiers = [StatModifier.flat(&"stat.power", 7.0)]
+	return definition
+
+
+## Puts [param quantity] of [param definition] in the bag and hands back the
+## stored instance.
+func _carry(entity: Node, definition: ItemDefinition, quantity: int) -> ItemInstance:
+	var instance := ItemInstance.create(definition, quantity)
+	assert_ok(_inventory(entity).add(instance), "The bag should take %s" % definition.id)
+	return _inventory(entity).find(definition.id)
+
+
+func _capability_types(entity: Node) -> Array[String]:
+	var types: Array[String] = []
+	for component in DefinitionBinder.collect_components(entity):
+		var script_name: String = component.get_script().get_global_name()
+		if not types.has(script_name):
+			types.append(script_name)
+	return types
+
+
+func _find(entity: Node, type: Variant) -> FrameworkComponent:
+	for component in DefinitionBinder.collect_components(entity):
+		if is_instance_of(component, type):
+			return component as FrameworkComponent
+	return null
+
+
+func _stats(entity: Node) -> StatsComponent:
+	return _find(entity, StatsComponent) as StatsComponent
+
+
+func _health(entity: Node) -> HealthComponent:
+	return _find(entity, HealthComponent) as HealthComponent
+
+
+func _receiver(entity: Node) -> DamageReceiverComponent:
+	return _find(entity, DamageReceiverComponent) as DamageReceiverComponent
+
+
+func _effects(entity: Node) -> StatusEffectComponent:
+	return _find(entity, StatusEffectComponent) as StatusEffectComponent
+
+
+func _inventory(entity: Node) -> InventoryComponent:
+	return _find(entity, InventoryComponent) as InventoryComponent
+
+
+func _equipment(entity: Node) -> EquipmentComponent:
+	return _find(entity, EquipmentComponent) as EquipmentComponent
+
+
+func _needs(entity: Node) -> NeedsComponent:
+	return _find(entity, NeedsComponent) as NeedsComponent
+
+
+func _consumer(entity: Node) -> ConsumerComponent:
+	return _find(entity, ConsumerComponent) as ConsumerComponent
+
+
+func _interactor(entity: Node) -> InteractorComponent:
+	return _find(entity, InteractorComponent) as InteractorComponent
+
+
+func _wallet(entity: Node) -> WalletComponent:
+	return _find(entity, WalletComponent) as WalletComponent
+
+
+func _faction(entity: Node) -> FactionComponent:
+	return _find(entity, FactionComponent) as FactionComponent
+
+
+func _combat(entity: Node) -> CombatComponent:
+	return _find(entity, CombatComponent) as CombatComponent
+
+
+func _state(entity: Node) -> SemanticState:
+	return _find(entity, SemanticState) as SemanticState
+
+
+# --- The structural check -------------------------------------------------
+
+## Module folder name to the id of the module living in it.
+##
+## Derived from the catalog's script paths rather than from the folder listing,
+## so a folder that holds no module -- [code]core[/code], [code]debug[/code],
+## [code]definitions[/code], [code]validation[/code] -- is never treated as one.
+func _module_folders() -> Dictionary:
+	if not _folders.is_empty():
+		return _folders
+	for id in ModuleCatalog.get_ids():
+		var path := ModuleCatalog.get_script_path(id)
+		_folders[_folder_of(path)] = id
+	return _folders
+
+
+## Every [code]class_name[/code] declared inside a module folder, mapped to
+## that folder. Classes declared outside one are deliberately absent: they
+## belong to Core or to a shared folder, and every module may know those.
+func _class_folders() -> Dictionary:
+	if not _classes.is_empty():
+		return _classes
+	var modules := _module_folders()
+	for path in _scripts(ADDON_ROOT):
+		var folder := _folder_of(path)
+		if not modules.has(folder):
+			continue
+		var declared := _declared_class(_readable(path))
+		if not declared.is_empty():
+			_classes[declared] = folder
+	return _classes
+
+
+## Every reference from a module's source to a sibling module's class that the
+## referring module's manifest does not declare.
+func _undeclared_sibling_references() -> Array[String]:
+	var modules := _module_folders()
+	var offenders: Array[String] = []
+	for path in _scripts(ADDON_ROOT):
+		var folder := _folder_of(path)
+		if not modules.has(folder):
+			continue
+		for offence in _undeclared_references_in(folder, FileAccess.get_file_as_string(path)):
+			offenders.append("%s: %s" % [path, offence])
+	offenders.sort()
+	return offenders
+
+
+## The same check applied to one piece of source attributed to one module
+## folder. Separated out so the check itself can be tested.
+func _undeclared_references_in(folder: String, source: String) -> Array[String]:
+	var modules := _module_folders()
+	var classes := _class_folders()
+	var declared := _declared_dependencies(modules.get(folder, &""))
+	var readable := _strip(source)
+
+	var offenders: Array[String] = []
+	for declared_class in classes:
+		var owner_folder: String = classes[declared_class]
+		if owner_folder == folder:
+			continue
+		if not _mentions(readable, declared_class):
+			continue
+		var dependency: StringName = modules[owner_folder]
+		if declared.has(dependency):
+			continue
+		offenders.append(
+			(
+				"references %s, which belongs to %s, and %s declares no such dependency"
+				% [declared_class, dependency, modules.get(folder, &"?")]
+			)
+		)
+	offenders.sort()
+	return offenders
+
+
+## Requirements and optional dependencies together: rule 36 asks for the
+## relationship to be written down, not for it to be mandatory.
+func _declared_dependencies(id: StringName) -> Dictionary:
+	var declared: Dictionary = {}
+	if id == &"":
+		return declared
+	var manifest := ModuleCatalog.get_manifest(id)
+	if manifest == null:
+		return declared
+	for required in manifest.requires:
+		declared[required] = true
+	for optional in manifest.optional:
+		declared[optional] = true
+	return declared
+
+
+## Whether [param source] uses [param identifier] as a whole word.
+##
+## The cheap containment test first because it runs a couple of hundred times
+## per file; the expression only has to adjudicate the handful that hit.
+func _mentions(source: String, identifier: String) -> bool:
+	if not source.contains(identifier):
+		return false
+	var pattern: RegEx = _patterns.get(identifier)
+	if pattern == null:
+		pattern = RegEx.create_from_string("\\b%s\\b" % identifier)
+		_patterns[identifier] = pattern
+	return pattern.search(source) != null
+
+
+func _declared_class(source: String) -> String:
+	for line in source.split("\n"):
+		var trimmed := line.strip_edges()
+		if trimmed.begins_with("class_name "):
+			return trimmed.substr("class_name ".length()).strip_edges()
+	return ""
+
+
+func _readable(path: String) -> String:
+	return _strip(FileAccess.get_file_as_string(path))
+
+
+## Source with comment lines and string literals removed.
+##
+## Comments go because a doc comment naming another module's class is a
+## cross-reference, not an import, and this addon's documentation is full of
+## them -- test_packaging.gd strips them for the same reason. String literals
+## go because a class name inside an error message imports nothing either.
+func _strip(source: String) -> String:
+	var quoted := RegEx.create_from_string('"[^"\\n]*"')
+	var kept: Array[String] = []
+	for line in source.split("\n"):
+		if line.strip_edges().begins_with("#"):
+			continue
+		kept.append(quoted.sub(line, " ", true))
+	return "\n".join(kept)
+
+
+func _folder_of(path: String) -> String:
+	return path.trim_prefix(ADDON_ROOT + "/").get_slice("/", 0)
+
+
+func _scripts(directory: String) -> Array[String]:
+	var found: Array[String] = []
+	var handle := DirAccess.open(directory)
+	if handle == null:
+		return found
+	handle.list_dir_begin()
+	var entry := handle.get_next()
+	while entry != "":
+		if not entry.begins_with("."):
+			var path := directory.path_join(entry)
+			if handle.current_is_dir():
+				found.append_array(_scripts(path))
+			elif entry.get_extension() == "gd":
+				found.append(path)
+		entry = handle.get_next()
+	handle.list_dir_end()
+	return found

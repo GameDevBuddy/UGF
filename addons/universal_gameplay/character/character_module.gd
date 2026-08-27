@@ -39,9 +39,32 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_ENTITY,
 			GameplayNames.MODULE_LOCOMOTION,
 		]
+		# A CharacterDefinition composes a profile from a dozen modules as
+		# typed @export properties, and CharacterController holds three sibling
+		# components. All of it works with any of them absent, but all of it is
+		# a compile-time reference, so all of it belongs here.
+		#
+		# Worth saying plainly: that a definition in one module names types
+		# from twelve others is itself worth questioning, and a seam would be
+		# the better answer than a longer list. That is a redesign of Character
+		# rather than a manifest fix, and it is not what this change is. What
+		# this change buys is that the relationship is written down and any new
+		# one has to be.
 		_manifest.optional = [
 			GameplayNames.MODULE_INPUT,
 			GameplayNames.MODULE_CAMERA,
 			GameplayNames.MODULE_ANIMATION,
+			GameplayNames.MODULE_STATS,
+			GameplayNames.MODULE_HEALTH,
+			GameplayNames.MODULE_INVENTORY,
+			GameplayNames.MODULE_EQUIPMENT,
+			GameplayNames.MODULE_INTERACTION,
+			GameplayNames.MODULE_COMBAT,
+			GameplayNames.MODULE_AI,
+			GameplayNames.MODULE_DIALOGUE,
+			GameplayNames.MODULE_FACTIONS,
+			GameplayNames.MODULE_COMMERCE,
+			GameplayNames.MODULE_LOOT,
+			GameplayNames.MODULE_SURVIVAL,
 		]
 	return _manifest

@@ -32,4 +32,17 @@ func get_manifest() -> ModuleManifest:
 			+ "stacking, and the world pickup that carries one."
 		)
 		_manifest.requires = [GameplayNames.MODULE_ENTITY]
+		# An ItemDefinition carries a profile from each of these as a typed
+		# @export, and an ItemInstance holds StatModifiers. None of it is
+		# needed for an item to exist -- a rock has no weapon profile -- but
+		# every one is a compile-time reference to a sibling, and rule 36 wants
+		# it written down where the registry and the docs can see it.
+		_manifest.optional = [
+			GameplayNames.MODULE_COMBAT,
+			GameplayNames.MODULE_EQUIPMENT,
+			GameplayNames.MODULE_SURVIVAL,
+			GameplayNames.MODULE_INTERACTION,
+			GameplayNames.MODULE_STATS,
+			GameplayNames.MODULE_INVENTORY,
+		]
 	return _manifest
