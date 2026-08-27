@@ -36,4 +36,8 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_AI,
 			GameplayNames.MODULE_COMMERCE,
 		]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_AI,
+			GameplayNames.MODULE_ENTITY,
+		]
 	return _manifest

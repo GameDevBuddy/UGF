@@ -43,4 +43,13 @@ func get_manifest() -> ModuleManifest:
 			# DialogueContext.get_listener_stats() returns a StatsComponent.
 			GameplayNames.MODULE_STATS,
 		]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_ENTITY,
+			GameplayNames.MODULE_INPUT,
+			GameplayNames.MODULE_INTERACTION,
+			GameplayNames.MODULE_INVENTORY,
+			GameplayNames.MODULE_ITEMS,
+			GameplayNames.MODULE_NARRATIVE,
+			GameplayNames.MODULE_STATS,
+		]
 	return _manifest

@@ -47,6 +47,86 @@ when absent -- a missing optional module is a valid state, never an error.
 | Vehicles | `module.vehicles` | `module.entity` | `module.ai`, `module.camera`, `module.character`, `module.equipment`, `module.health`, `module.input`, `module.interaction`, `module.inventory`, `module.locomotion` |
 | World State | `module.world_state` | — | `module.entity`, `module.narrative` |
 
+## Deleting a module
+
+Enabling a module and *having* it are different things. The table above is
+about enablement: what must be registered for a feature to work. This section
+is about the folder on disk.
+
+GDScript resolves every class name a script mentions when that script is
+parsed -- before anything is registered, and whether or not it ever is. So a
+module can be genuinely optional to *enable* and still be impossible to
+*delete*, because a sibling names one of its classes in a type annotation.
+Both facts are true at once, and only the first one used to be written down.
+
+**9 of the 32 modules can be deleted on their own.** Nothing else names their classes, so removing the folder leaves every remaining module parsing:
+
+- `module.crafting` — `crafting/`
+- `module.crime` — `crime_heat/`
+- `module.gathering` — `gathering/`
+- `module.networking` — `networking/`
+- `module.progression` — `progression/`
+- `module.save` — `persistence/`
+- `module.spawn` — `spawn/`
+- `module.ui` — `ui/`
+- `module.vehicles` — `vehicles/`
+
+For the rest, deleting the folder means deleting what parses against it too.
+This is the full list, so a project trimming the addon can work out what a
+removal actually costs before making it:
+
+| Deleting | Cost | Also requires deleting |
+| --- | --- | --- |
+| `module.ai` | 18 more | `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.animation` | 19 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.camera` | 2 more | `module.character`, `module.vehicles` |
+| `module.character` | 1 more | `module.vehicles` |
+| `module.combat` | 18 more | `module.ai`, `module.character`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.commerce` | 4 more | `module.character`, `module.gathering`, `module.loot`, `module.vehicles` |
+| `module.dialogue` | 3 more | `module.character`, `module.ui`, `module.vehicles` |
+| `module.entity` | 29 more | `module.ai`, `module.animation`, `module.camera`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.health`, `module.interaction`, `module.inventory`, `module.items`, `module.locomotion`, `module.loot`, `module.missions`, `module.networking`, `module.progression`, `module.save`, `module.spawn`, `module.stats`, `module.status_effects`, `module.survival`, `module.ui`, `module.vehicles`, `module.world_state` |
+| `module.equipment` | 18 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.factions` | 6 more | `module.character`, `module.commerce`, `module.crime`, `module.gathering`, `module.loot`, `module.vehicles` |
+| `module.health` | 20 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.status_effects`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.input` | 4 more | `module.character`, `module.dialogue`, `module.ui`, `module.vehicles` |
+| `module.interaction` | 18 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.inventory` | 18 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.items` | 18 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.locomotion` | 21 more | `module.ai`, `module.animation`, `module.camera`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.loot` | 3 more | `module.character`, `module.gathering`, `module.vehicles` |
+| `module.missions` | 1 more | `module.ui` |
+| `module.narrative` | 10 more | `module.character`, `module.crafting`, `module.dialogue`, `module.gathering`, `module.loot`, `module.missions`, `module.progression`, `module.spawn`, `module.ui`, `module.vehicles` |
+| `module.stats` | 22 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.health`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.progression`, `module.status_effects`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.status_effects` | 19 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.survival`, `module.ui`, `module.vehicles` |
+| `module.survival` | 18 more | `module.ai`, `module.character`, `module.combat`, `module.commerce`, `module.crafting`, `module.crime`, `module.dialogue`, `module.equipment`, `module.factions`, `module.gathering`, `module.interaction`, `module.inventory`, `module.items`, `module.loot`, `module.missions`, `module.networking`, `module.ui`, `module.vehicles` |
+| `module.world_state` | 1 more | `module.spawn` |
+
+After trimming, check the result rather than trusting this table:
+
+```
+godot --headless --path . --import
+godot --headless --path . --script tools/check_removability.gd
+```
+
+It loads every remaining script and names any that no longer parse. Worth
+running because a missing module is quiet: `--import` returns success on a
+project whose scripts cannot parse, and the engine only reports a missing
+class when something loads the script that names it -- which for a
+definition type may not be until the day you open the scene that uses it.
+
+### Modules that cannot be separated
+
+Some pairs name each other's classes, so neither can be deleted without the
+other and the chain above runs in both directions. These are not a bug on
+their own -- two modules that genuinely describe one idea will do this --
+but they are the places where the module boundary is doing least work:
+
+- `module.ai` ↔ `module.combat`
+- `module.combat` ↔ `module.items`
+- `module.equipment` ↔ `module.items`
+- `module.inventory` ↔ `module.items`
+- `module.items` ↔ `module.survival`
+
 ## What each module is for
 
 ### AI
