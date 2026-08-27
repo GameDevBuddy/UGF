@@ -144,3 +144,27 @@ func _pick(pool: Array, rng: RandomNumberGenerator) -> LootEntry:
 		if target < running:
 			return entry as LootEntry
 	return pool.back() as LootEntry
+
+## Every item and sub-table this pool can produce.
+##
+## The check that catches a corpse dropping nothing because the item it names
+## was renamed three commits ago.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for entry in entries:
+		if entry != null and entry.item_id != &"":
+			ids.append(entry.item_id)
+	for table_id in sub_tables:
+		if table_id != &"":
+			ids.append(table_id)
+	return ids
+
+
+## Sub-tables are edges: a table rolling itself, directly or through another,
+## recurses until the stack gives out.
+func get_dependency_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for table_id in sub_tables:
+		if table_id != &"":
+			ids.append(table_id)
+	return ids

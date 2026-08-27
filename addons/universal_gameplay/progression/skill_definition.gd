@@ -101,3 +101,26 @@ func validate() -> ValidationResult:
 				"modifiers"
 			)
 	return result
+
+## The track this belongs to and the skills it names.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if track_id != &"":
+		ids.append(track_id)
+	for skill_id in requires_skills:
+		if skill_id != &"":
+			ids.append(skill_id)
+	for skill_id in conflicts_with:
+		if skill_id != &"":
+			ids.append(skill_id)
+	return ids
+
+
+## Prerequisites are edges. A loop of them is a branch of the tree nothing can
+## reach, and it reads as "the skill just does nothing".
+func get_dependency_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for skill_id in requires_skills:
+		if skill_id != &"":
+			ids.append(skill_id)
+	return ids

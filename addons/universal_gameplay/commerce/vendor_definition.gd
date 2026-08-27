@@ -100,3 +100,13 @@ func validate() -> ValidationResult:
 				"restock_interval"
 			)
 	return result
+
+## Stock items and the currency this vendor trades in.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for entry in stock:
+		if entry != null and entry.item_id != &"":
+			ids.append(entry.item_id)
+	if currency != &"":
+		ids.append(currency)
+	return ids
