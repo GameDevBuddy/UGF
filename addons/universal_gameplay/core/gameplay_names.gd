@@ -155,6 +155,8 @@ const EVENT_VEHICLE_ENTERED: StringName = &"vehicle_entered"
 const EVENT_VEHICLE_EXITED: StringName = &"vehicle_exited"
 const EVENT_VEHICLE_DESTROYED: StringName = &"vehicle_destroyed"
 const EVENT_CRIME_WITNESSED: StringName = &"crime_witnessed"
+const EVENT_INTERACTION_COMPLETED: StringName = &"interaction_completed"
+const EVENT_ITEM_CRAFTED: StringName = &"item_crafted"
 const EVENT_WANTED_CHANGED: StringName = &"wanted_changed"
 
 # --- AI activity names ---------------------------------------------------
@@ -183,6 +185,7 @@ const OBJECTIVE_TALK: StringName = &"objective.talk"
 const OBJECTIVE_REACH: StringName = &"objective.reach"
 const OBJECTIVE_INTERACT: StringName = &"objective.interact"
 const OBJECTIVE_SURVIVE: StringName = &"objective.survive"
+const OBJECTIVE_CRAFT: StringName = &"objective.craft"
 const OBJECTIVE_CUSTOM: StringName = &"objective.custom"
 
 # --- Core service identifiers --------------------------------------------

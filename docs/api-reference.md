@@ -19,7 +19,9 @@ instantiated by the catalog, not referenced globally), and events have none
 | `AIContext` | `RefCounted` | Everything a brain is given to think with. |
 | `AIControllerComponent` | `FrameworkComponent` | Drives a character from a brain instead of from a gamepad. |
 | `AIMemory` | `RefCounted` | Everything one NPC currently knows about everything else. |
+| `DamagePerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory who just hurt it. |
 | `HostilityProvider` | `RefCounted` | Decides whether one entity should fight another. |
+| `InteractionPerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory that somebody used something in front of it. |
 | `MemoryEntry` | `RefCounted` | What an NPC remembers about one other entity. |
 | `NPCRoleDefinition` | `FrameworkDefinition` | What an NPC is for: civilian, guard, combatant, vendor, companion. |
 | `NavigationAdapter` | `FrameworkComponent` | Turns "go there" into a direction to move in. |
@@ -138,6 +140,7 @@ instantiated by the catalog, not referenced globally), and events have none
 
 | Class | Extends | Summary |
 | --- | --- | --- |
+| `CraftEventAdapter` | `FrameworkComponent` | Promotes a finished craft to a cross-feature fact. |
 | `CraftingComponent` | `FrameworkComponent` | The capability of making things. |
 | `CraftingStation` | `FrameworkComponent` | A workbench, a forge, a campfire. |
 | `RecipeDefinition` | `FrameworkDefinition` | What can be made from what. |
@@ -268,6 +271,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `InteractionComponent` | `FrameworkComponent` | The capability of being interacted with. |
 | `InteractionContext` | `RefCounted` | Everything one interaction attempt knows about itself. |
 | `InteractionDefinition` | `FrameworkDefinition` | One thing that can be done to something: open, loot, talk, enter, hack. |
+| `InteractionEventAdapter` | `FrameworkComponent` | Promotes a finished interaction to a cross-feature fact. |
 | `InteractionRequirement` | `Resource` | A condition an interaction must satisfy before it runs. |
 | `InteractorComponent` | `FrameworkComponent` | The capability of interacting with things. |
 | `InteractorProfile` | `Resource` | How far something can reach and how it finds what to reach for. |
