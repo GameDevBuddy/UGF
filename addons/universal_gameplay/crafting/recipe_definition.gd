@@ -139,3 +139,19 @@ func validate() -> ValidationResult:
 			)
 		result.merge(entry.validate())
 	return result
+
+## Everything this recipe consumes and produces.
+##
+## Implementation Plan 28 asks for "impossible recipes" to be caught; a recipe
+## naming an ingredient no longer in the registry is exactly that.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for ingredient in ingredients:
+		if ingredient != null and ingredient.item_id != &"":
+			ids.append(ingredient.item_id)
+	if output_id != &"":
+		ids.append(output_id)
+	for extra in extra_outputs:
+		if extra != &"":
+			ids.append(extra)
+	return ids

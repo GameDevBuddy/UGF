@@ -37,6 +37,27 @@ var threat: float = 0.0
 ## sighting.
 var heard: bool = false
 
+## Whether this target has hurt us. The plan's [code]damaged_by[/code]
+## perception fact.
+##
+## Sticky on purpose. Being shot at from cover is the case that matters, and a
+## flag that cleared as soon as the shooter went out of sight would make an NPC
+## forget it was under attack every time the attacker ducked.
+var attacked_us: bool = false
+
+## Total damage this target has done to us, so a brain can prefer the bigger
+## threat over the nearer one.
+var damage_taken_from: float = 0.0
+
+## Whether this target was seen using something. The plan's interaction
+## stimulus, which is what makes a guard react to somebody opening a door they
+## should not.
+var interacted: bool = false
+
+## The interaction last seen, so a brain can care about a lockpick and ignore
+## a light switch.
+var last_interaction: StringName = &""
+
 
 static func create(p_target: Node, p_threat: float = 1.0) -> MemoryEntry:
 	var entry := MemoryEntry.new()
@@ -71,6 +92,28 @@ func hear(position: Vector3) -> void:
 	visible = false
 	heard = true
 	# A noise is noticed immediately. There is no gradual "did I hear that".
+	noticed = true
+
+
+## Records being hurt by this target.
+##
+## Noticed immediately and without a sight line: being shot tells you somebody
+## is there whether or not you can see them, which is the whole reason this is
+## a perception fact rather than a combat one.
+func hurt_by(position: Vector3, amount: float) -> void:
+	last_known_position = position
+	time_since_seen = 0.0
+	attacked_us = true
+	damage_taken_from += amount
+	noticed = true
+
+
+## Records seeing this target use something.
+func saw_interaction(position: Vector3, interaction_id: StringName) -> void:
+	last_known_position = position
+	time_since_seen = 0.0
+	interacted = true
+	last_interaction = interaction_id
 	noticed = true
 
 

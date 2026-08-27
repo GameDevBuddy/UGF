@@ -65,7 +65,19 @@ func think(context: AIContext) -> void:
 		context.controller.set_ai_state(GameplayNames.AI_STATE_DEAD)
 		return
 
+	# An order outranks a stance, but never a threat: a companion told to wait
+	# still defends itself, because an order that got a follower killed while
+	# it stood there is an order nobody would ever give.
+	var companion := CompanionComponent.find_on(context.actor)
+	var ordered := companion != null and companion.get_order() != CompanionComponent.Order.FOLLOW
+
 	var primary := context.get_primary_target()
+	if primary != null and companion != null and not companion.defends_itself and ordered:
+		primary = null
+
+	if primary == null and companion != null and _obey(context, companion):
+		return
+
 	if primary != null and _should_flee(context, primary):
 		_flee(context, primary)
 		return
@@ -83,7 +95,38 @@ func think(context: AIContext) -> void:
 		_flee(context, remembered)
 		return
 
+	if companion != null and _obey(context, companion):
+		return
+
 	_idle(context)
+
+
+## Carries out a companion's standing order, and reports whether it did.
+##
+## Returns false for a companion that is simply following and already close
+## enough, so the brain falls through to its ordinary idle behaviour -- a
+## companion standing next to its leader should look around and shift its
+## weight like any other NPC rather than freeze.
+func _obey(context: AIContext, companion: CompanionComponent) -> bool:
+	var controller := context.controller
+	var goal := companion.get_movement_goal()
+	var order := companion.get_order()
+
+	if not goal["should_move"]:
+		if order == CompanionComponent.Order.WAIT:
+			controller.set_ai_state(GameplayNames.AI_STATE_HOLD)
+			controller.stop_moving()
+			return true
+		return false
+
+	if not context.can_move():
+		return false
+	controller.set_ai_state(
+		GameplayNames.AI_STATE_HOLD if order == CompanionComponent.Order.WAIT
+		else GameplayNames.AI_STATE_FOLLOW
+	)
+	controller.move_towards(goal["point"] as Vector3, sprints_to_engage)
+	return true
 
 
 func get_state() -> StringName:

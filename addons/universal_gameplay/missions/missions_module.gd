@@ -30,7 +30,12 @@ func get_manifest() -> ModuleManifest:
 			+ "One objective definition covers the fourteen baseline kinds, "
 			+ "because they differ in which event they count, not in code."
 		)
-		_manifest.requires = []
+		# Entity is required, not optional. area_trigger.gd extends
+		# FrameworkComponent and two more files call DefinitionBinder, so
+		# Missions cannot parse without Entity, let alone run. This manifest
+		# said "requires nothing" for ten milestones, and docs/modules.md --
+		# generated from it -- told every project the same thing.
+		_manifest.requires = [GameplayNames.MODULE_ENTITY]
 		_manifest.optional = [
 			GameplayNames.MODULE_NARRATIVE,
 			GameplayNames.MODULE_ITEMS,

@@ -39,6 +39,15 @@ var _modifiers: Array[StatModifier] = []
 var _current: Dictionary[StringName, float] = {}
 var _since_spent: Dictionary[StringName, float] = {}
 var _cache: Dictionary[StringName, float] = {}
+## Source stat to the derived stats that read it, built once at initialise.
+##
+## Built rather than searched, because invalidation happens on every modifier
+## change and walking every definition to ask "does anything derive from this?"
+## would put a scan in the hot path (rule 25).
+var _dependents: Dictionary[StringName, Array] = {}
+## Derived stats currently being computed, so a derivation cycle that slipped
+## past validation returns a number instead of hanging the engine.
+var _deriving: Dictionary[StringName, bool] = {}
 
 
 func _ready() -> void:
@@ -51,11 +60,34 @@ func initialize(context: EntityContext) -> void:
 	super(context)
 	_profile = _resolve_profile()
 	_rebuild_from_profile()
+	_build_dependents()
 	set_physics_process(auto_tick and _has_regenerating_stat())
 
 
 func _physics_process(delta: float) -> void:
 	tick(delta)
+
+
+## Maps each source stat to the derived stats that read it.
+##
+## Built once, here, rather than searched on every invalidation. A stat change
+## is one of the most frequent things that happens in a game, and asking every
+## definition "does anything derive from you?" each time would be exactly the
+## hot-loop scan rule 25 forbids.
+func _build_dependents() -> void:
+	_dependents.clear()
+	if _profile == null:
+		return
+	for definition in _profile.stats:
+		if definition == null or definition.derivation == null:
+			continue
+		for source in definition.derivation.sources:
+			if source == &"" or source == definition.id:
+				continue
+			if not _dependents.has(source):
+				_dependents[source] = [] as Array[StringName]
+			if not _dependents[source].has(definition.id):
+				_dependents[source].append(definition.id)
 
 
 # --- Reading --------------------------------------------------------------
@@ -74,10 +106,41 @@ func get_value(stat: StringName, fallback: float = 0.0) -> float:
 	var minimum := definition.get_minimum() if definition != null else -INF
 	var maximum := definition.get_maximum() if definition != null else INF
 	var value := StatCalculator.calculate(
-		_bases[stat], _modifiers, stat, minimum, maximum
+		_base_for(stat, definition), _modifiers, stat, minimum, maximum
 	)
 	_cache[stat] = value
 	return value
+
+
+## Whether this stat computes its base from others rather than storing one.
+func is_derived(stat: StringName) -> bool:
+	var definition := _profile.get_definition(stat) if _profile != null else null
+	return definition != null and definition.derivation != null and not definition.derivation.is_empty()
+
+
+## The base a stat's modifiers apply on top of.
+##
+## Authored for most stats; computed for a derived one. Note that a derived
+## stat still keeps whatever is in [member _bases] -- untouched and unused --
+## so turning a derivation off restores the authored number rather than
+## leaving the stat at whatever it last computed.
+func _base_for(stat: StringName, definition: StatDefinition) -> float:
+	if definition == null or definition.derivation == null or definition.derivation.is_empty():
+		return _bases[stat]
+
+	# A cycle that got past validation would recurse forever. Returning the
+	# authored base breaks it with a number rather than a crash, and content
+	# validation is where the author is told about it.
+	if _deriving.has(stat):
+		return _bases[stat]
+
+	_deriving[stat] = true
+	var values: Dictionary = {}
+	for source in definition.derivation.sources:
+		if _bases.has(source):
+			values[source] = get_value(source)
+	_deriving.erase(stat)
+	return definition.derivation.evaluate(values)
 
 
 func has_stat(stat: StringName) -> bool:
@@ -402,6 +465,14 @@ func _invalidate(stat: StringName) -> void:
 		_set_current(stat, value)
 	if is_nan(previous) or not is_equal_approx(previous, value):
 		stat_changed.emit(stat, value, previous if not is_nan(previous) else value)
+
+	# Anything derived from this one is now stale. Without this, raising
+	# strength leaves carry weight reading its old value until something else
+	# happens to clear the cache -- a bug that looks like the derivation not
+	# working, intermittently.
+	for dependent in _dependents.get(stat, []):
+		if dependent != stat:
+			_invalidate(dependent)
 
 
 func _set_current(stat: StringName, value: float) -> void:

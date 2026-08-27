@@ -18,6 +18,13 @@ extends FrameworkDefinition
 ## Starting value before modifiers. A per-entity override lives on the profile.
 @export var default_base: float = 0.0
 
+## Where this stat's base comes from, when it is not authored.
+##
+## Null is the normal case: most stats have a base a designer typed. A stat
+## with a derivation ignores [member default_base] and computes its base from
+## other stats instead, recomputing whenever one of them changes.
+@export var derivation: StatDerivation
+
 @export_group("Range")
 @export var minimum: float = 0.0
 ## Upper clamp on the computed value. Leave at INF for an unbounded attribute.

@@ -50,6 +50,24 @@ signal attack_interrupted(context: AttackContext, reason: StringName)
 ## Tick from [method Node._physics_process]. Off when something else owns time.
 @export var auto_tick: bool = true
 
+@export_group("Hit detection")
+## Opens the damage window on an animation event instead of on the authored
+## startup time.
+##
+## [b]The fallback is not optional.[/b] Plan 14 lists "animation event" as a
+## hit-detection strategy, and the failure mode of one is a swing whose
+## animation was retimed, renamed or never authored, leaving a sword that never
+## connects and no error anywhere. So the authored startup still runs as a
+## backstop: whichever comes first opens the window, and the window still
+## resolves exactly once.
+@export var window_from_animation: bool = false
+
+## Where the animation talks back. Resolved from the entity when left null.
+@export var animation_events: AnimationEventRelay
+
+## The event name that opens the window.
+@export var hit_event: StringName = &"animation.hit"
+
 var _profile: CombatProfile = null
 var _provider: HitProvider = null
 var _rng: RandomNumberGenerator = null
@@ -79,6 +97,10 @@ func initialize(context: EntityContext) -> void:
 		stats = _find(StatsComponent) as StatsComponent
 	if semantic_state == null:
 		semantic_state = _find(SemanticState) as SemanticState
+	if animation_events == null:
+		animation_events = AnimationEventRelay.find_on(get_parent())
+	if animation_events != null:
+		animation_events.subscribe(hit_event, _on_animation_hit)
 	set_physics_process(auto_tick)
 
 
@@ -159,6 +181,28 @@ func clear_aim_override() -> void:
 
 # --- State ----------------------------------------------------------------
 
+## Puts the character into or out of aim-down-sights.
+##
+## [b]The state lives on the character, not in the weapon.[/b] Plan 13 is
+## explicit that aim is a character or camera state, and the reason is that
+## three separate things read it -- the weapon tightens its cone, the camera
+## narrows its field of view, the animation graph picks a different pose -- and
+## none of them should have to ask a weapon. Swapping weapons mid-aim then
+## keeps the character aiming, which is what a player expects and what a flag
+## on the weapon would get wrong.
+func set_aiming(aiming: bool) -> void:
+	if semantic_state == null:
+		return
+	if aiming:
+		semantic_state.add_state(GameplayNames.STATE_AIMING)
+	else:
+		semantic_state.remove_state(GameplayNames.STATE_AIMING)
+
+
+func is_aiming() -> bool:
+	return semantic_state != null and semantic_state.has_state(GameplayNames.STATE_AIMING)
+
+
 func is_attacking() -> bool:
 	return _swing != null
 
@@ -212,7 +256,15 @@ func can_attack(secondary: bool = false) -> FrameworkResult:
 
 
 ## Starts one attack. The one call a player, an AI and a test all make.
-func attack(secondary: bool = false) -> FrameworkResult:
+## Swings, shoots or punches.
+##
+## [param damage_scale] multiplies this one attack's damage. A charge weapon
+## passes what its release bought; everything else leaves it at one. It is an
+## argument rather than state on the component because it belongs to the swing
+## and has to be gone by the next one -- a field would survive into the
+## following attack and turn one charged shot into a permanently charged
+## weapon.
+func attack(secondary: bool = false, damage_scale: float = 1.0) -> FrameworkResult:
 	var allowed := can_attack(secondary)
 	if allowed.is_err():
 		return allowed
@@ -226,6 +278,7 @@ func attack(secondary: bool = false) -> FrameworkResult:
 	# hit anything at range. Building a context mutates nothing, so refusing
 	# below still leaves the actor exactly as it was (rule 17).
 	var context := _build_context(definition, secondary)
+	context.damage_scale = damage_scale
 	if weapon != null and weapon.has_weapon():
 		var paid := weapon.consume_shot(secondary)
 		if paid.is_err():
@@ -327,6 +380,16 @@ func _tick_trigger() -> void:
 
 ## Resolves the damage window: what the attack connected with, and what that
 ## does to each of them.
+## The animation says the blow lands now.
+##
+## Ignored when no attack is in flight, so a stray keyframe on an idle
+## animation cannot make a character swing at nothing.
+func _on_animation_hit(_payload: Variant) -> void:
+	if not window_from_animation or _swing == null or _resolved:
+		return
+	_open_window()
+
+
 func _open_window() -> void:
 	_resolved = true
 	_phase = CombatSolver.Phase.ACTIVE

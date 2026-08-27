@@ -9,3 +9,6 @@
 # OS noise
 .DS_Store
 Thumbs.db
+
+# Workflow agent worktrees. Transient, and each is its own git repo.
+.claude/worktrees/

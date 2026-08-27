@@ -20,6 +20,8 @@ signal item_added(instance: ItemInstance, quantity: int)
 signal item_removed(definition_id: StringName, quantity: int)
 ## Emitted after any change, for a UI that only wants to know it is stale.
 signal contents_changed
+## Emitted when wearing an item destroyed it, carrying what was lost.
+signal item_broke(definition_id: StringName)
 
 ## Capacity and filters. Takes precedence over the definition's profile.
 @export var profile_override: InventoryProfile
@@ -231,6 +233,37 @@ func remove(definition_id: StringName, quantity: int = 1) -> FrameworkResult:
 
 
 ## Removes one specific stack and hands it back to the caller.
+## Wears an item down, and destroys it when its definition says it should be.
+##
+## [b]One owner for the whole transaction.[/b] Degrading and then deciding what
+## to do about a broken item happened in two places before this -- gathering
+## and crafting -- and neither destroyed anything, so
+## [member ItemDefinition.breaks_when_worn_out] was a field read by nothing
+## but its own validator. Two call sites each half-implementing a rule is how a
+## flag ends up decorative (rule 4).
+##
+## Returns how much condition was actually lost, which is zero for an item with
+## no durability. A caller wanting to know whether it broke checks
+## [method ItemInstance.is_broken] before this returns, or listens to
+## [signal item_broke].
+func wear(instance: ItemInstance, amount: float) -> float:
+	if instance == null or amount <= 0.0:
+		return 0.0
+	var lost := instance.degrade(amount)
+	if lost <= 0.0:
+		return 0.0
+
+	if instance.is_broken() and instance.definition != null:
+		if instance.definition.breaks_when_worn_out:
+			var id := instance.get_definition_id()
+			# Only if we are actually holding it. Wearing somebody else's tool
+			# must not silently delete it from our own bag by id.
+			if contains(instance):
+				remove_instance(instance)
+			item_broke.emit(id)
+	return lost
+
+
 func remove_instance(instance: ItemInstance) -> FrameworkResult:
 	var index := _items.find(instance)
 	if index < 0:

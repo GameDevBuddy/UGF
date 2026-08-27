@@ -103,3 +103,13 @@ func validate() -> ValidationResult:
 			"supersedes"
 		)
 	return result
+
+## The faction that cares about this crime.
+##
+## The plan's "invalid faction references" check. A crime reporting to a
+## faction nobody registered accrues heat that no NPC will ever act on.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	if law_faction != &"":
+		ids.append(law_faction)
+	return ids

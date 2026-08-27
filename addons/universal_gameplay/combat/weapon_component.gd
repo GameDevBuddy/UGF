@@ -24,6 +24,13 @@ signal reload_cancelled
 ## Emitted when the equipped weapon changes, including to nothing.
 signal weapon_changed(profile: WeaponProfile)
 
+## Emitted as a charge builds, from 0.0 to 1.0, for a UI meter.
+signal charge_changed(charge: float)
+## Emitted when a charge reaches full, whether or not it fires there.
+signal charge_full
+## Emitted when a charge is let go below the minimum and bought nothing.
+signal charge_wasted(charge: float)
+
 ## Weapon used regardless of what is equipped. What a turret, a mounted gun or
 ## a fixed-loadout enemy sets.
 @export var profile_override: WeaponProfile
@@ -53,6 +60,11 @@ var _recoil: Vector2 = Vector2.ZERO
 var _cooldown: float = 0.0
 var _reload_remaining: float = 0.0
 var _reloading: bool = false
+var _charge: float = 0.0
+var _charging: bool = false
+## The charge the last shot was released at, so the attack that follows can be
+## scaled by it. Cleared on the next press.
+var _released_charge: float = 0.0
 
 
 func _ready() -> void:
@@ -148,13 +160,31 @@ func get_reload_remaining() -> float:
 # --- Aim state ------------------------------------------------------------
 
 ## Current cone in degrees, handed to a delivery as its spread.
+## The cone this weapon is currently shooting into, in degrees.
+##
+## [b]Aiming is read, not owned.[/b] Implementation Plan 13 says aim is a
+## character or camera state rather than something hardcoded in each weapon, so
+## the weapon asks the entity's [SemanticState] whether it is being aimed and
+## applies its own profile's multiplier. Nothing here sets that state, and a
+## weapon on an entity with no semantic state simply never tightens.
 func get_spread() -> float:
+	if is_aiming() and _profile != null and _profile.recoil != null:
+		return _spread * _profile.recoil.aim_spread_multiplier
 	return _spread
+
+
+## Whether the entity carrying this weapon is aiming down sights.
+func is_aiming() -> bool:
+	return semantic_state != null and semantic_state.has_state(GameplayNames.STATE_AIMING)
 
 
 ## Accumulated view kick in degrees as (pitch, yaw). A camera adds this; combat
 ## never rotates anything itself (rule 21).
+##
+## Scaled by the aim multiplier for the same reason spread is.
 func get_recoil() -> Vector2:
+	if is_aiming() and _profile != null and _profile.recoil != null:
+		return _recoil * _profile.recoil.aim_recoil_multiplier
 	return _recoil
 
 
@@ -206,6 +236,81 @@ func consume_shot(secondary: bool = false) -> FrameworkResult:
 	return FrameworkResult.ok(null)
 
 
+# --- Charging -------------------------------------------------------------
+
+## How far the current charge has built, 0.0 to 1.0.
+func get_charge() -> float:
+	return _charge
+
+
+func is_charging() -> bool:
+	return _charging
+
+
+## True when the charge has built far enough that releasing it fires.
+func is_charge_usable() -> bool:
+	if _profile == null or not _profile.is_charged():
+		return false
+	return _charge >= _profile.minimum_charge
+
+
+## Starts building a charge. What a trigger press does on a charge weapon.
+##
+## Refused for the same reasons firing is refused -- empty, reloading, cooling
+## down -- because a charge that builds on an empty magazine is a player
+## holding a trigger for a shot that was never going to happen.
+func begin_charge(secondary: bool = false) -> FrameworkResult:
+	if _profile == null or not _profile.is_charged():
+		return FrameworkResult.fail(
+			&"weapon.not_charged", "This weapon does not charge."
+		)
+	var allowed := can_fire(secondary)
+	if allowed.is_err():
+		return allowed
+	_charging = true
+	_released_charge = 0.0
+	return FrameworkResult.ok(null)
+
+
+## Lets the charge go, and reports what it bought.
+##
+## The payload is the damage scale for the shot: 1.0 at the minimum, up to
+## [member WeaponProfile.charge_multiplier] at full. A release below the
+## minimum fails with [code]weapon.charge_too_low[/code] and costs nothing --
+## no round, no cooldown -- because a tap that fired a limp shot would read as
+## a wasted round rather than as a missed input.
+func release_charge() -> FrameworkResult:
+	if _profile == null or not _profile.is_charged():
+		return FrameworkResult.fail(
+			&"weapon.not_charged", "This weapon does not charge."
+		)
+
+	var held := _released_charge if _released_charge > 0.0 else _charge
+	_charging = false
+	_released_charge = 0.0
+
+	var scale := _profile.get_charge_scale(held)
+	if scale <= 0.0:
+		charge_wasted.emit(held)
+		# The charge is kept rather than dumped, so a player who taps twice in
+		# quick succession accumulates towards a shot instead of starting over.
+		return FrameworkResult.fail(
+			&"weapon.charge_too_low",
+			"Released at %.0f%%, below the %.0f%% this weapon needs."
+			% [held * 100.0, _profile.minimum_charge * 100.0]
+		)
+
+	_set_charge(0.0)
+	return FrameworkResult.ok(scale)
+
+
+## Abandons a charge without firing. What holstering or being staggered does.
+func cancel_charge() -> void:
+	_charging = false
+	_released_charge = 0.0
+	_set_charge(0.0)
+
+
 # --- Reloading ------------------------------------------------------------
 
 ## Starts a reload. Returns a failure when there is nothing to gain by it, so
@@ -250,11 +355,49 @@ func tick(delta: float) -> void:
 	if delta <= 0.0:
 		return
 	_cooldown = maxf(0.0, _cooldown - delta)
+	_tick_charge(delta)
 	if _profile != null and _profile.recoil != null:
 		_spread = CombatSolver.recover_spread(_spread, _profile.recoil, delta)
 		_recoil = CombatSolver.recover_recoil(_recoil, _profile.recoil, delta)
 	if _reloading:
 		_tick_reload(delta)
+
+
+## Advances or decays a charge.
+##
+## A charge builds only while the trigger is genuinely held. Letting it build
+## on its own would make a weapon fire itself the moment the player stopped
+## paying attention.
+func _tick_charge(delta: float) -> void:
+	if _profile == null or not _profile.is_charged():
+		return
+
+	if _charging:
+		if _profile.charge_time <= 0.0:
+			_set_charge(1.0)
+		else:
+			_set_charge(_charge + delta / _profile.charge_time)
+		if _charge >= 1.0 and _profile.releases_at_full:
+			# The weapon that would overheat. Release rather than fire: the
+			# component decides charge, the caller decides shots, and a
+			# component that fired by itself would be a second owner of that.
+			_charging = false
+			_released_charge = 1.0
+		return
+
+	if _charge > 0.0 and _profile.charge_decay_per_second > 0.0:
+		_set_charge(_charge - _profile.charge_decay_per_second * delta)
+
+
+func _set_charge(value: float) -> void:
+	var clamped := clampf(value, 0.0, 1.0)
+	if is_equal_approx(clamped, _charge):
+		return
+	var was_full := _charge >= 1.0
+	_charge = clamped
+	charge_changed.emit(_charge)
+	if _charge >= 1.0 and not was_full:
+		charge_full.emit()
 
 
 func _tick_reload(delta: float) -> void:

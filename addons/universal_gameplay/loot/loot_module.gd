@@ -33,6 +33,12 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_INVENTORY,
 		]
 		_manifest.optional = [
+			# LootComponent reads narrative flags for conditional entries and
+			# deposits currency into a wallet. Both are optional -- a drop with
+			# no flag store is ineligible, a coin with no wallet lands nowhere
+			# -- but both are compile-time references to a sibling.
+			GameplayNames.MODULE_NARRATIVE,
+			GameplayNames.MODULE_COMMERCE,
 			GameplayNames.MODULE_ENTITY,
 			GameplayNames.MODULE_HEALTH,
 		]

@@ -221,7 +221,20 @@ func _drive_interaction() -> void:
 func _drive_combat() -> void:
 	if combat == null:
 		return
-	if _router.was_just_pressed(GameplayNames.ACTION_ATTACK):
+
+	# Aim is a character state the controller owns, not a weapon field. Driven
+	# every frame from the held action rather than on the edges, so a context
+	# switch that swallows the release cannot leave the character stuck aiming.
+	combat.set_aiming(_router.is_pressed(GameplayNames.ACTION_AIM))
+
+	var weapon_charges := (
+		combat.weapon != null
+		and combat.weapon.get_profile() != null
+		and combat.weapon.get_profile().is_charged()
+	)
+	if weapon_charges:
+		_drive_charge()
+	elif _router.was_just_pressed(GameplayNames.ACTION_ATTACK):
 		combat.hold()
 	elif combat.is_holding() and not _router.is_pressed(GameplayNames.ACTION_ATTACK):
 		combat.release()
@@ -230,6 +243,24 @@ func _drive_combat() -> void:
 		combat.attack(true)
 	if _router.was_just_pressed(GameplayNames.ACTION_RELOAD) and combat.weapon != null:
 		combat.weapon.reload()
+
+
+## Press to build, release to fire.
+##
+## The attack is issued on the release rather than the press, which is the
+## whole difference between a charge weapon and every other kind. A release
+## that did not reach the minimum charge fires nothing and costs nothing --
+## [method WeaponComponent.release_charge] refuses it -- so a stray tap is a
+## missed input rather than a wasted round.
+func _drive_charge() -> void:
+	var weapon := combat.weapon
+	if _router.was_just_pressed(GameplayNames.ACTION_ATTACK):
+		weapon.begin_charge()
+		return
+	if weapon.is_charging() and not _router.is_pressed(GameplayNames.ACTION_ATTACK):
+		var released := weapon.release_charge()
+		if released.is_ok():
+			combat.attack(false, float(released.payload))
 
 
 ## Applies look input to the camera. Mouse motion arrives here from

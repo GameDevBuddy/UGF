@@ -50,6 +50,32 @@ func validate() -> ValidationResult:
 	return result
 
 
+## Definition ids this one points at, for the registry-wide reference check.
+##
+## [b]Core asks; the module answers.[/b] A generic validator cannot know that a
+## recipe's ingredients are item ids and its craft time is not, and Core must
+## never learn what a recipe is (rule 1). So the question lives here as a
+## method returning nothing, and each definition type that references others
+## overrides it. A type that overrides nothing is simply a type with no
+## cross-references, which is most of them.
+##
+## Return ids only, never resources. A definition holding a direct reference to
+## another needs no check: it either loaded or it did not.
+func get_referenced_ids() -> Array[StringName]:
+	return []
+
+
+## Definition ids this one must come after, for the registry-wide cycle check.
+##
+## Distinct from [method get_referenced_ids] because most references are not
+## edges in a graph. A recipe referencing an item is not "after" it in any
+## ordering, but a mission requiring another mission is, and a chain of those
+## that loops is a chain no player can ever finish -- Implementation Plan 28
+## names circular mission chains specifically.
+func get_dependency_ids() -> Array[StringName]:
+	return []
+
+
 func has_tag(tag: StringName) -> bool:
 	return tags.has(tag)
 

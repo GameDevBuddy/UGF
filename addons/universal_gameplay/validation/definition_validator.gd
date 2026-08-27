@@ -26,6 +26,77 @@ static func validate_registry(registry: DefinitionRegistry) -> ValidationResult:
 		result.merge(validate_definition(definition))
 
 	result.merge(check_id_collisions(registry))
+	result.merge(check_registry_references(registry))
+	result.merge(check_dependency_cycles(registry))
+	return result
+
+
+## Resolves every cross-reference every definition declares.
+##
+## This is the check that catches a mission pointing at an item somebody
+## renamed, or a recipe whose output no longer exists -- the failures that
+## otherwise surface hours later as a quest that cannot be completed and no
+## error anywhere.
+##
+## The primitive for it ([method check_references]) shipped in M0 and nothing
+## ever called it. A validator with an unreachable check is a validator that
+## reports content clean because it never looked.
+static func check_registry_references(registry: DefinitionRegistry) -> ValidationResult:
+	var result := ValidationResult.new()
+	if registry == null:
+		return result
+	for definition in registry.get_all():
+		if definition == null:
+			continue
+		var referenced := definition.get_referenced_ids()
+		if referenced.is_empty():
+			continue
+		result.merge(
+			check_references(
+				registry,
+				referenced,
+				definition.resource_path,
+				definition.get_debug_name()
+			)
+		)
+	return result
+
+
+## Finds loops in whatever ordering the registry's definitions declare.
+##
+## Only ids present in the registry become edges. A dependency on something not
+## registered is a broken reference, which
+## [method check_registry_references] already reports -- counting it here as
+## well would report one content bug twice under two different names.
+static func check_dependency_cycles(registry: DefinitionRegistry) -> ValidationResult:
+	var result := ValidationResult.new()
+	if registry == null:
+		return result
+
+	var edges: Dictionary[StringName, Array] = {}
+	for definition in registry.get_all():
+		if definition == null or definition.id == &"":
+			continue
+		var dependencies: Array[StringName] = []
+		for id in definition.get_dependency_ids():
+			if id != &"" and registry.has_definition(id):
+				dependencies.append(id)
+		if not dependencies.is_empty():
+			edges[definition.id] = dependencies
+
+	for cycle in find_cycles(edges):
+		var names: Array[String] = []
+		for id in cycle:
+			names.append(str(id))
+		result.add_error(
+			&"validator.dependency_cycle",
+			(
+				"These definitions depend on each other in a loop, so none of "
+				+ "them can ever be reached: %s."
+			) % " -> ".join(names),
+			"",
+			"get_dependency_ids"
+		)
 	return result
 
 

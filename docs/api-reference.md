@@ -19,7 +19,10 @@ instantiated by the catalog, not referenced globally), and events have none
 | `AIContext` | `RefCounted` | Everything a brain is given to think with. |
 | `AIControllerComponent` | `FrameworkComponent` | Drives a character from a brain instead of from a gamepad. |
 | `AIMemory` | `RefCounted` | Everything one NPC currently knows about everything else. |
+| `CompanionComponent` | `FrameworkComponent` | Somebody who follows you and does what you tell them. |
+| `DamagePerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory who just hurt it. |
 | `HostilityProvider` | `RefCounted` | Decides whether one entity should fight another. |
+| `InteractionPerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory that somebody used something in front of it. |
 | `MemoryEntry` | `RefCounted` | What an NPC remembers about one other entity. |
 | `NPCRoleDefinition` | `FrameworkDefinition` | What an NPC is for: civilian, guard, combatant, vendor, companion. |
 | `NavigationAdapter` | `FrameworkComponent` | Turns "go there" into a direction to move in. |
@@ -36,6 +39,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | Class | Extends | Summary |
 | --- | --- | --- |
 | `AnimationAdapter` | `FrameworkComponent` | Writes movement state into an [AnimationTree], and nothing else. |
+| `AnimationEventRelay` | `FrameworkComponent` | The one place an animation is allowed to talk back to gameplay. |
 | `AnimationProfile` | `Resource` | Maps semantic gameplay state to [AnimationTree] parameters. |
 
 ## `camera/`
@@ -65,13 +69,18 @@ instantiated by the catalog, not referenced globally), and events have none
 | `CombatHit` | `RefCounted` | One thing an attack connected with. |
 | `CombatProfile` | `Resource` | How an entity fights when nothing is in its hands. |
 | `CombatSolver` | `RefCounted` | Every piece of combat maths, as static functions on no state. |
+| `DefenseComponent` | `FrameworkComponent` | The capability of not simply standing there being hit. |
+| `DefenseDamageAdapter` | `FrameworkComponent` | Lets a defender's block, parry or dodge affect what actually lands. |
+| `DefenseProfile` | `Resource` | What a character can do about being hit: block, parry, dodge. |
 | `HitProvider` | `RefCounted` | Where combat asks the world what it just hit. |
 | `HitscanDelivery` | `AttackDelivery` | A shot that arrives the instant it is fired. |
+| `HurtboxDelivery` | `AttackDelivery` | An attack that hits whatever its weapon is currently touching. |
 | `MeleeDelivery` | `AttackDelivery` | A swing: everything inside an arc, within reach. |
 | `PhysicsHitProvider` | `HitProvider` | The real world, behind the seam. |
 | `Projectile` | `Node3D` | Something in flight that has not hit anything yet. |
 | `ProjectileDelivery` | `AttackDelivery` | A shot that takes time to arrive. |
 | `RecoilProfile` | `Resource` | How a weapon's aim degrades as it is fired, and how it settles. |
+| `TargetingComponent` | `FrameworkComponent` | Free aim, soft target and hard lock, as Implementation Plan 14 lists them. |
 | `WeaponComponent` | `FrameworkComponent` | Everything about a weapon that changes: ammunition, reloading, and how far its aim has drifted. |
 | `WeaponProfile` | `Resource` | What makes an item a weapon. |
 
@@ -138,6 +147,7 @@ instantiated by the catalog, not referenced globally), and events have none
 
 | Class | Extends | Summary |
 | --- | --- | --- |
+| `CraftEventAdapter` | `FrameworkComponent` | Promotes a finished craft to a cross-feature fact. |
 | `CraftingComponent` | `FrameworkComponent` | The capability of making things. |
 | `CraftingStation` | `FrameworkComponent` | A workbench, a forge, a campfire. |
 | `RecipeDefinition` | `FrameworkDefinition` | What can be made from what. |
@@ -163,7 +173,9 @@ instantiated by the catalog, not referenced globally), and events have none
 
 | Class | Extends | Summary |
 | --- | --- | --- |
+| `AIInspector` | `RefCounted` | The plan's AI Debug Panel: brain state, target, perception facts and path. |
 | `DebugCommand` | `RefCounted` | One thing a console can do. |
+| `DebugCommandPack` | `RefCounted` | A module's own console cheats, registered by the project that wants them. |
 | `DebugConsole` | `Node` | Runs typed commands. |
 | `EntityInspector` | `RefCounted` | Reports what an entity actually is at runtime. |
 | `EventMonitor` | `Node` | A live feed of everything crossing the EventBus. |
@@ -192,7 +204,9 @@ instantiated by the catalog, not referenced globally), and events have none
 | `DialogueRuntime` | `RefCounted` | One conversation, in progress. |
 | `EndNode` | `DialogueNode` | The conversation is over. |
 | `ItemCondition` | `DialogueCondition` | Asks whether someone is carrying something. |
+| `ItemTransferAction` | `DialogueAction` | Hands something over, or takes it away. |
 | `LineNode` | `DialogueNode` | Somebody says something, and the conversation waits. |
+| `MissionAction` | `DialogueAction` | Starts, completes or abandons a mission from a conversation. |
 | `NarrativeAction` | `DialogueAction` | Writes to the narrative state: raise a flag, set a variable, bump a counter, change how a faction feels. |
 | `NarrativeCondition` | `DialogueCondition` | Asks the narrative state a question: is this flag raised, is this counter high enough, does this faction like us. |
 | `TalkAction` | `InteractionAction` | Starts a conversation. |
@@ -230,6 +244,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `FactionHostilityProvider` | `HostilityProvider` | Answers the AI's hostility question from faction standing. |
 | `FactionPriceAdapter` | `RefCounted` | Turns faction standing into a price multiplier. |
 | `FactionService` | `FrameworkService` | Who feels what about whom, and what that means. |
+| `FactionsDebugCommands` | `DebugCommandPack` | The plan's "change faction" cheat. |
 
 ## `gathering/`
 
@@ -268,6 +283,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `InteractionComponent` | `FrameworkComponent` | The capability of being interacted with. |
 | `InteractionContext` | `RefCounted` | Everything one interaction attempt knows about itself. |
 | `InteractionDefinition` | `FrameworkDefinition` | One thing that can be done to something: open, loot, talk, enter, hack. |
+| `InteractionEventAdapter` | `FrameworkComponent` | Promotes a finished interaction to a cross-feature fact. |
 | `InteractionRequirement` | `Resource` | A condition an interaction must satisfy before it runs. |
 | `InteractorComponent` | `FrameworkComponent` | The capability of interacting with things. |
 | `InteractorProfile` | `Resource` | How far something can reach and how it finds what to reach for. |
@@ -280,6 +296,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | Class | Extends | Summary |
 | --- | --- | --- |
 | `InventoryComponent` | `FrameworkComponent` | The capability of carrying things. |
+| `InventoryDebugCommands` | `DebugCommandPack` | The plan's "spawn item" cheat, living in the module it cheats at. |
 | `InventoryEventAdapter` | `FrameworkComponent` | Promotes "something went in the bag" to a cross-feature fact. |
 | `InventoryProfile` | `Resource` | What one container can hold: how much, and what kind. |
 
@@ -319,6 +336,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `MissionReward` | `Resource` | Something a mission gives back. |
 | `MissionRuntime` | `RefCounted` | One mission, in progress. |
 | `MissionService` | `FrameworkService` | Owns every mission in flight, and is the only thing listening to the bus. |
+| `MissionsDebugCommands` | `DebugCommandPack` | The plan's "start mission" cheat, plus the two that make it useful. |
 | `NarrativeReward` | `MissionReward` | Pays in story: a flag raised, a counter bumped, standing shifted. |
 | `ObjectiveDefinition` | `FrameworkDefinition` | One thing a mission asks for. |
 | `ObjectiveRuntime` | `RefCounted` | One objective, in progress. |
@@ -356,6 +374,16 @@ instantiated by the catalog, not referenced globally), and events have none
 | `SaveService` | `FrameworkService` | Captures the world, writes it, and puts it back. |
 | `SaveSlot` | `RefCounted` | What a load menu shows without reading the whole save. |
 
+## `progression/`
+
+| Class | Extends | Summary |
+| --- | --- | --- |
+| `ProgressionComponent` | `FrameworkComponent` | The capability of getting better at things. |
+| `ProgressionEventAdapter` | `FrameworkComponent` | Promotes levelling up to a cross-feature fact. |
+| `ProgressionProfile` | `Resource` | The tracks and skills one kind of character can advance. |
+| `ProgressionTrackDefinition` | `FrameworkDefinition` | One thing a character gets better at, and what it costs to do so. |
+| `SkillDefinition` | `FrameworkDefinition` | Something a character can unlock by spending points. |
+
 ## `spawn/`
 
 | Class | Extends | Summary |
@@ -373,8 +401,10 @@ instantiated by the catalog, not referenced globally), and events have none
 | --- | --- | --- |
 | `StatCalculator` | `RefCounted` | Deterministic stat arithmetic. |
 | `StatDefinition` | `FrameworkDefinition` | What one stat is: its range, whether it depletes, and how it comes back. |
+| `StatDerivation` | `Resource` | A stat whose base is computed from other stats. |
 | `StatModifier` | `Resource` | One change to one stat, and where it came from. |
 | `StatsComponent` | `FrameworkComponent` | The capability of having numbers that other systems modify. |
+| `StatsDebugCommands` | `DebugCommandPack` | The plan's "set stat" cheat. |
 | `StatsProfile` | `Resource` | The set of stats one kind of entity has, and what its bases are. |
 
 ## `status_effects/`
@@ -435,6 +465,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `VehicleDefinition` | `FrameworkDefinition` | What a vehicle is: scene, seats, handling, fuel, storage, camera, upgrades. |
 | `VehicleEventAdapter` | `FrameworkComponent` | Promotes getting in, getting out and getting wrecked to cross-feature facts. |
 | `VehicleSolver` | `RefCounted` | Pure driving maths: how speed and heading change under throttle, brake and steering. |
+| `VehiclesDebugCommands` | `DebugCommandPack` | The plan's "enter vehicle" cheat. |
 
 ## `world/`
 

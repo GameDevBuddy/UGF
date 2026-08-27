@@ -42,6 +42,15 @@ var exclude: Array[Node] = []
 ## needs a world does nothing, which beats spawning into a freed tree.
 var world: Node = null
 
+## Multiplier applied to this whole attack's damage.
+##
+## Distinct from [member CombatHit.damage_scale], which is per-hit and belongs
+## to the geometry -- falloff, a limb multiplier, a pellet's share. This one
+## belongs to the swing: a charge released at full, a power attack, a sneak
+## bonus. Two scales rather than one because a charged shotgun blast needs both
+## and collapsing them would make either falloff or the charge unreadable.
+var damage_scale: float = 1.0
+
 ## Free-form per-attack bag. Deliberately small.
 var extras: Dictionary = {}
 
@@ -82,7 +91,7 @@ func make_damage(hit: CombatHit) -> DamageContext:
 	var amount := 0.0
 	var tags: Array[StringName] = []
 	if attack != null:
-		amount = attack.damage * hit.damage_scale
+		amount = attack.damage * hit.damage_scale * damage_scale
 		tags = attack.damage_tags.duplicate()
 	var damage := DamageContext.create(amount, instigator, source, tags)
 	damage.weapon_id = weapon_id

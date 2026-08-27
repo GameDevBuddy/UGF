@@ -17,12 +17,12 @@ when absent -- a missing optional module is a valid state, never an error.
 | AI | `module.ai` | `module.entity` | `module.combat`, `module.health`, `module.interaction`, `module.locomotion` |
 | Animation | `module.animation` | `module.entity` | `module.locomotion` |
 | Camera | `module.camera` | `module.entity` | `module.locomotion` |
-| Character | `module.character` | `module.entity`, `module.locomotion` | `module.animation`, `module.camera`, `module.input` |
-| Combat | `module.combat` | `module.entity`, `module.health` | `module.equipment`, `module.inventory`, `module.items`, `module.stats` |
+| Character | `module.character` | `module.entity`, `module.locomotion` | `module.ai`, `module.animation`, `module.camera`, `module.combat`, `module.commerce`, `module.dialogue`, `module.equipment`, `module.factions`, `module.health`, `module.input`, `module.interaction`, `module.inventory`, `module.loot`, `module.stats`, `module.survival` |
+| Combat | `module.combat` | `module.entity`, `module.health` | `module.ai`, `module.animation`, `module.equipment`, `module.inventory`, `module.items`, `module.stats` |
 | Commerce | `module.commerce` | `module.inventory`, `module.items` | `module.entity`, `module.factions`, `module.interaction` |
 | Crafting | `module.crafting` | `module.inventory`, `module.items` | `module.entity`, `module.narrative` |
 | Crime and Heat | `module.crime` | — | `module.ai`, `module.entity`, `module.factions`, `module.health`, `module.narrative`, `module.world_state` |
-| Dialogue | `module.dialogue` | `module.entity` | `module.input`, `module.interaction`, `module.inventory`, `module.items`, `module.narrative` |
+| Dialogue | `module.dialogue` | `module.entity` | `module.input`, `module.interaction`, `module.inventory`, `module.items`, `module.narrative`, `module.stats` |
 | Entity | `module.entity` | — | — |
 | Equipment | `module.equipment` | `module.entity`, `module.items` | `module.inventory`, `module.stats` |
 | Factions | `module.factions` | — | `module.ai`, `module.commerce`, `module.entity` |
@@ -31,12 +31,13 @@ when absent -- a missing optional module is a valid state, never an error.
 | Input | `module.input` | — | — |
 | Interaction | `module.interaction` | `module.entity` | `module.inventory`, `module.items`, `module.stats` |
 | Inventory | `module.inventory` | `module.entity`, `module.items` | — |
-| Items | `module.items` | `module.entity` | — |
+| Items | `module.items` | `module.entity` | `module.combat`, `module.equipment`, `module.interaction`, `module.inventory`, `module.stats`, `module.survival` |
 | Locomotion | `module.locomotion` | `module.entity` | — |
-| Loot | `module.loot` | `module.inventory`, `module.items` | `module.entity`, `module.health` |
-| Missions | `module.missions` | — | `module.inventory`, `module.items`, `module.narrative` |
+| Loot | `module.loot` | `module.inventory`, `module.items` | `module.commerce`, `module.entity`, `module.health`, `module.narrative` |
+| Missions | `module.missions` | `module.entity` | `module.inventory`, `module.items`, `module.narrative` |
 | Narrative State | `module.narrative` | — | — |
 | Networking | `module.networking` | — | `module.combat`, `module.entity`, `module.inventory`, `module.items` |
+| Progression | `module.progression` | — | `module.entity`, `module.narrative`, `module.stats` |
 | Persistence | `module.save` | `module.entity` | — |
 | Spawn | `module.spawn` | `module.world_state` | `module.ai`, `module.entity`, `module.narrative`, `module.vehicles` |
 | Stats | `module.stats` | `module.entity` | — |
@@ -185,6 +186,12 @@ Flags, variables, counters and relationships that outlive the entities they desc
 `module.networking` — `res://addons/universal_gameplay/networking/networking_module.gd`
 
 An authority facade in front of mutation APIs the modules already had, with a transport seam and server-side validation.
+
+### Progression
+
+`module.progression` — `res://addons/universal_gameplay/progression/progression_module.gd`
+
+Experience tracks, levels, skill points and perk unlocks. Grants stat modifiers and semantic states; never runs behaviour itself.
 
 ### Persistence
 

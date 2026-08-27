@@ -204,7 +204,19 @@ func _finish() -> FrameworkResult:
 			continue
 		var instance := ItemInstance.create(definition, int(output["quantity"]))
 		if inventory != null:
-			inventory.add(instance)
+			# The container takes ownership of what it is handed. When the whole
+			# stack merges into one already on the shelf, InventoryComponent
+			# does `instance.quantity -= quantity` and the caller is left
+			# holding an object that says zero -- which is why item_added emits
+			# the count as its own argument rather than trusting the instance.
+			#
+			# Reporting that object as "what came out" made the second batch of
+			# anything announce nothing, so a "craft two rations" objective
+			# never advanced. Invisible on the first batch, which was the only
+			# path M12's suite exercised.
+			var stored := inventory.add(instance)
+			if stored.is_ok() and not inventory.contains(instance):
+				instance.quantity = int(output["quantity"])
 		produced.append(instance)
 
 	crafted.emit(recipe, produced)
@@ -223,7 +235,7 @@ func _consume(recipe: RecipeDefinition) -> void:
 		elif ingredient.durability_cost > 0.0 and instance.has_durability():
 			# Tools wear rather than vanish. A hammer that broke would be
 			# removed by the inventory's own rules, not by crafting.
-			instance.degrade(ingredient.durability_cost)
+			inventory.wear(instance, ingredient.durability_cost)
 
 
 ## The carried stack that satisfies an ingredient, or null.

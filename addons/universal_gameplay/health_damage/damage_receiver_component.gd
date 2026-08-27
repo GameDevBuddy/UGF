@@ -21,6 +21,14 @@ signal damage_received(context: DamageContext)
 ## Emitted when mitigation removed the hit entirely.
 signal damage_blocked(context: DamageContext)
 
+## Emitted before mitigation, so an adapter can scale the blow.
+##
+## [b]This is a seam, not a hook for gameplay.[/b] The one thing a listener may
+## do is call [method scale_incoming]; anything else it wants belongs after the
+## damage has landed. Health has no idea what a parry is and must not learn
+## (rule 9), so Combat's defence adapter listens here and scales.
+signal damage_incoming(context: DamageContext)
+
 ## Armour and resistances. Takes precedence over the definition's profile.
 @export var profile_override: ResistanceProfile
 
@@ -35,6 +43,11 @@ signal damage_blocked(context: DamageContext)
 @export var resistance_stat: StringName = &"stat.resistance"
 
 var _profile: ResistanceProfile = null
+
+
+## Multiplier accumulated by [signal damage_incoming] listeners for the blow
+## currently in flight. Reset at the start of every receive.
+var _incoming_scale: float = 1.0
 
 
 func initialize(context: EntityContext) -> void:
@@ -53,6 +66,13 @@ func receive(context: DamageContext) -> FrameworkResult:
 		return FrameworkResult.fail(
 			&"damage.null_context", "Cannot receive null damage."
 		)
+
+	# Announced before resistances rather than after: a dodge that still had to
+	# get through armour would mean armour changed how well dodging worked.
+	_incoming_scale = 1.0
+	damage_incoming.emit(context)
+	if _incoming_scale < 1.0:
+		context.amount *= _incoming_scale
 
 	DamagePipeline.mitigate(context, _profile, _get_extra_resistance())
 
@@ -84,6 +104,15 @@ func receive_amount(
 ## What [param amount] would become against this entity, without applying it.
 func preview(amount: float, tags: Array[StringName] = []) -> float:
 	return DamagePipeline.preview(amount, tags, _profile, _get_extra_resistance())
+
+
+## Scales the blow currently being received.
+##
+## Only meaningful from a [signal damage_incoming] handler; outside one there
+## is nothing to scale. Multiple listeners compose by multiplication, so a
+## parry and a damage shield both apply rather than the last one winning.
+func scale_incoming(scale: float) -> void:
+	_incoming_scale *= clampf(scale, 0.0, 1.0)
 
 
 func get_profile() -> ResistanceProfile:

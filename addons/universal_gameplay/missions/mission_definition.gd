@@ -153,3 +153,26 @@ func validate() -> ValidationResult:
 		if reward != null:
 			result.merge(reward.validate())
 	return result
+
+## Prerequisite missions, which must not form a loop.
+##
+## A chain of missions each requiring the next is a chain no player can start.
+func get_dependency_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for mission_id in required_missions:
+		if mission_id != &"":
+			ids.append(mission_id)
+	return ids
+
+
+## Item ids this mission pays out. A reward pointing at a renamed item is a
+## mission that completes and hands over nothing.
+func get_referenced_ids() -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for reward in rewards:
+		if reward == null:
+			continue
+		var item_id: Variant = reward.get("item_id")
+		if item_id is StringName and item_id != &"":
+			ids.append(item_id)
+	return ids
