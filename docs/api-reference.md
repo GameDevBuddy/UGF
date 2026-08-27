@@ -392,6 +392,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | --- | --- | --- |
 | `StatCalculator` | `RefCounted` | Deterministic stat arithmetic. |
 | `StatDefinition` | `FrameworkDefinition` | What one stat is: its range, whether it depletes, and how it comes back. |
+| `StatDerivation` | `Resource` | A stat whose base is computed from other stats. |
 | `StatModifier` | `Resource` | One change to one stat, and where it came from. |
 | `StatsComponent` | `FrameworkComponent` | The capability of having numbers that other systems modify. |
 | `StatsDebugCommands` | `DebugCommandPack` | The plan's "set stat" cheat. |

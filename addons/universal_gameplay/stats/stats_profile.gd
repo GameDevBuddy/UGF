@@ -73,6 +73,11 @@ func validate() -> ValidationResult:
 			)
 		seen[definition.id] = true
 		result.merge(definition.validate())
+		if definition.derivation != null and not definition.derivation.is_empty():
+			result.merge(definition.derivation.validate(definition.id, resource_path))
+
+	result.merge(_check_derivation_sources(seen))
+	result.merge(_check_derivation_cycles())
 
 	for id in base_overrides:
 		if not seen.has(id):
@@ -100,4 +105,63 @@ func validate() -> ValidationResult:
 				resource_path,
 				"innate_modifiers"
 			)
+	return result
+
+
+## Derivations reading a stat this profile does not carry.
+##
+## Not an error: a source the entity lacks contributes nothing, which is the
+## right behaviour for a crate with no strength. But it is almost always a
+## typo, and a derived stat quietly equal to its constant is the kind of wrong
+## number nobody notices for months.
+func _check_derivation_sources(known: Dictionary[StringName, bool]) -> ValidationResult:
+	var result := ValidationResult.new()
+	for definition in stats:
+		if definition == null or definition.derivation == null:
+			continue
+		for source in definition.derivation.sources:
+			if source != &"" and not known.has(source):
+				result.add_warning(
+					&"stats_profile.unknown_derivation_source",
+					(
+						"'%s' derives from '%s', which this profile does not "
+						+ "carry, so that term contributes nothing."
+					) % [definition.id, source],
+					resource_path,
+					"stats"
+				)
+	return result
+
+
+## Derivations that read each other, directly or through others.
+##
+## The runtime survives one -- it breaks the loop and returns the authored
+## base -- but the value it returns is meaningless, so the author has to be
+## told rather than left with a number that looks computed.
+func _check_derivation_cycles() -> ValidationResult:
+	var result := ValidationResult.new()
+	var edges: Dictionary[StringName, Array] = {}
+	for definition in stats:
+		if definition == null or definition.derivation == null:
+			continue
+		var sources: Array[StringName] = []
+		for source in definition.derivation.sources:
+			if source != &"":
+				sources.append(source)
+		if not sources.is_empty():
+			edges[definition.id] = sources
+
+	for cycle in DefinitionValidator.find_cycles(edges):
+		var names: Array[String] = []
+		for id in cycle:
+			names.append(str(id))
+		result.add_error(
+			&"stats_profile.derivation_cycle",
+			(
+				"These stats derive from each other, so none of them has a "
+				+ "value to compute: %s."
+			) % " -> ".join(names),
+			resource_path,
+			"stats"
+		)
 	return result
