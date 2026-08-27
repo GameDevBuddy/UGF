@@ -19,6 +19,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `AIContext` | `RefCounted` | Everything a brain is given to think with. |
 | `AIControllerComponent` | `FrameworkComponent` | Drives a character from a brain instead of from a gamepad. |
 | `AIMemory` | `RefCounted` | Everything one NPC currently knows about everything else. |
+| `CompanionComponent` | `FrameworkComponent` | Somebody who follows you and does what you tell them. |
 | `DamagePerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory who just hurt it. |
 | `HostilityProvider` | `RefCounted` | Decides whether one entity should fight another. |
 | `InteractionPerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory that somebody used something in front of it. |
@@ -38,6 +39,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | Class | Extends | Summary |
 | --- | --- | --- |
 | `AnimationAdapter` | `FrameworkComponent` | Writes movement state into an [AnimationTree], and nothing else. |
+| `AnimationEventRelay` | `FrameworkComponent` | The one place an animation is allowed to talk back to gameplay. |
 | `AnimationProfile` | `Resource` | Maps semantic gameplay state to [AnimationTree] parameters. |
 
 ## `camera/`
@@ -67,13 +69,18 @@ instantiated by the catalog, not referenced globally), and events have none
 | `CombatHit` | `RefCounted` | One thing an attack connected with. |
 | `CombatProfile` | `Resource` | How an entity fights when nothing is in its hands. |
 | `CombatSolver` | `RefCounted` | Every piece of combat maths, as static functions on no state. |
+| `DefenseComponent` | `FrameworkComponent` | The capability of not simply standing there being hit. |
+| `DefenseDamageAdapter` | `FrameworkComponent` | Lets a defender's block, parry or dodge affect what actually lands. |
+| `DefenseProfile` | `Resource` | What a character can do about being hit: block, parry, dodge. |
 | `HitProvider` | `RefCounted` | Where combat asks the world what it just hit. |
 | `HitscanDelivery` | `AttackDelivery` | A shot that arrives the instant it is fired. |
+| `HurtboxDelivery` | `AttackDelivery` | An attack that hits whatever its weapon is currently touching. |
 | `MeleeDelivery` | `AttackDelivery` | A swing: everything inside an arc, within reach. |
 | `PhysicsHitProvider` | `HitProvider` | The real world, behind the seam. |
 | `Projectile` | `Node3D` | Something in flight that has not hit anything yet. |
 | `ProjectileDelivery` | `AttackDelivery` | A shot that takes time to arrive. |
 | `RecoilProfile` | `Resource` | How a weapon's aim degrades as it is fired, and how it settles. |
+| `TargetingComponent` | `FrameworkComponent` | Free aim, soft target and hard lock, as Implementation Plan 14 lists them. |
 | `WeaponComponent` | `FrameworkComponent` | Everything about a weapon that changes: ammunition, reloading, and how far its aim has drifted. |
 | `WeaponProfile` | `Resource` | What makes an item a weapon. |
 
@@ -197,7 +204,9 @@ instantiated by the catalog, not referenced globally), and events have none
 | `DialogueRuntime` | `RefCounted` | One conversation, in progress. |
 | `EndNode` | `DialogueNode` | The conversation is over. |
 | `ItemCondition` | `DialogueCondition` | Asks whether someone is carrying something. |
+| `ItemTransferAction` | `DialogueAction` | Hands something over, or takes it away. |
 | `LineNode` | `DialogueNode` | Somebody says something, and the conversation waits. |
+| `MissionAction` | `DialogueAction` | Starts, completes or abandons a mission from a conversation. |
 | `NarrativeAction` | `DialogueAction` | Writes to the narrative state: raise a flag, set a variable, bump a counter, change how a faction feels. |
 | `NarrativeCondition` | `DialogueCondition` | Asks the narrative state a question: is this flag raised, is this counter high enough, does this faction like us. |
 | `TalkAction` | `InteractionAction` | Starts a conversation. |

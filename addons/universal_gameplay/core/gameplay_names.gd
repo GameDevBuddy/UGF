@@ -38,6 +38,13 @@ const STATE_INTERACTING: StringName = &"state.interacting"
 const STATE_ATTACKING: StringName = &"state.attacking"
 const STATE_RELOADING: StringName = &"state.reloading"
 const STATE_AIMING: StringName = &"state.aiming"
+const ANIMATION_EVENT_HIT: StringName = &"animation.hit"
+const ANIMATION_EVENT_HIT_END: StringName = &"animation.hit_end"
+const ANIMATION_EVENT_FOOTSTEP: StringName = &"animation.footstep"
+
+const STATE_STAGGERED: StringName = &"state.staggered"
+const STATE_BLOCKING: StringName = &"state.blocking"
+const STATE_DODGING: StringName = &"state.dodging"
 const STATE_ALERTED: StringName = &"state.alerted"
 const STATE_FLEEING: StringName = &"state.fleeing"
 
@@ -166,6 +173,8 @@ const EVENT_WANTED_CHANGED: StringName = &"wanted_changed"
 # Core having to grow a case for them (rule 32).
 
 const AI_STATE_IDLE: StringName = &"ai.idle"
+const AI_STATE_FOLLOW: StringName = &"ai.follow"
+const AI_STATE_HOLD: StringName = &"ai.hold"
 const AI_STATE_WANDER: StringName = &"ai.wander"
 const AI_STATE_INVESTIGATE: StringName = &"ai.investigate"
 const AI_STATE_ENGAGE: StringName = &"ai.engage"
