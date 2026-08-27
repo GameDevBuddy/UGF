@@ -1,7 +1,29 @@
-# Source documents
+# Documentation
 
-The two documents in this folder are the specification the framework is built from.
-They are the authority; the code follows them, not the other way round.
+## Using the framework
+
+| Document | What it covers |
+| --- | --- |
+| [`modules.md`](modules.md) | Every module the addon ships, what it requires, and what it will integrate with when present. **Generated** from the manifests. |
+| [`api-reference.md`](api-reference.md) | Every `class_name` the addon defines, with the first line of its own documentation. **Generated** from the source. |
+| [`migration-guide.md`](migration-guide.md) | Upgrading the addon, save schema migrations, and replacing a shipped module with your own. |
+
+Regenerate the two generated documents after changing a manifest or a class:
+
+```bash
+godot --headless --path . --script tools/generate_docs.gd
+```
+
+`tests/cases/test_documentation.gd` fails when a committed file and the source disagree, so
+forgetting this step fails the build rather than shipping a stale table.
+
+Worked examples live in [`../examples/`](../examples/) — two projects, each one settings
+resource and a folder of `.tres`, with no GDScript in either.
+
+## Source documents
+
+The two specification documents are the authority; the code follows them, not the other way
+round.
 
 | Document | What it covers |
 | --- | --- |
