@@ -323,3 +323,88 @@ func test_an_item_with_no_rarity_is_never_biased() -> void:
 	_loot_of(corpse).generate()
 
 	assert_eq(_inventory_of(corpse).count(&"item.plain"), 1)
+
+
+# --- Durability degradation policy ----------------------------------------
+#
+# ItemDefinition.breaks_when_worn_out was declared in M4 and read by nothing
+# except its own validator. Gathering and crafting both wore tools down and
+# neither destroyed one, so a worn-out axe stayed in the bag forever as an
+# entry the harvest loop skipped -- which made durability decorative.
+
+func _axe(breaks: bool) -> ItemDefinition:
+	var definition := ItemDefinition.new()
+	definition.id = &"item.axe"
+	definition.display_name = "Axe"
+	definition.category = &"item.tool"
+	definition.max_stack = 1
+	definition.max_durability = 10.0
+	definition.breaks_when_worn_out = breaks
+	core.register_definition(definition)
+	return definition
+
+
+func _bag_with(definition: ItemDefinition) -> InventoryComponent:
+	var entity := add_test_node(Node3D.new()) as Node3D
+	entity.name = "Woodcutter"
+	var inventory := InventoryComponent.new()
+	inventory.name = "InventoryComponent"
+	var profile := InventoryProfile.new()
+	profile.slot_count = 10
+	inventory.profile_override = profile
+	entity.add_child(inventory)
+	inventory.initialize(EntityContext.create(entity, null, core))
+	inventory.add(ItemInstance.create(definition, 1))
+	return inventory
+
+
+func test_wearing_an_item_out_destroys_it_when_its_definition_says_so() -> void:
+	var bag := _bag_with(_axe(true))
+	var axe := bag.find(&"item.axe")
+
+	bag.wear(axe, 4.0)
+	assert_eq(bag.count(&"item.axe"), 1, "Worn, not gone")
+
+	bag.wear(axe, 6.0)
+
+	assert_eq(bag.count(&"item.axe"), 0, "It wore out and was not destroyed")
+
+
+func test_an_item_that_does_not_break_stays_in_the_bag_at_zero() -> void:
+	# A whetstone-able sword: useless until repaired, but still yours.
+	var bag := _bag_with(_axe(false))
+	var axe := bag.find(&"item.axe")
+
+	bag.wear(axe, 20.0)
+
+	assert_eq(bag.count(&"item.axe"), 1)
+	assert_true(axe.is_broken())
+
+
+func test_breaking_is_announced() -> void:
+	var bag := _bag_with(_axe(true))
+	var broken: Array[StringName] = []
+	bag.item_broke.connect(func(id: StringName) -> void: broken.append(id))
+
+	bag.wear(bag.find(&"item.axe"), 99.0)
+
+	assert_eq(broken, [&"item.axe"] as Array[StringName])
+
+
+func test_wearing_an_item_with_no_durability_does_nothing() -> void:
+	var plain := _item(&"item.rock")
+	var bag := _bag_with(plain)
+	assert_eq(bag.wear(bag.find(&"item.rock"), 5.0), 0.0)
+	assert_eq(bag.count(&"item.rock"), 1)
+
+
+func test_wearing_somebody_elses_tool_does_not_delete_ours() -> void:
+	# Removal is by instance, not by id. Two people holding the same kind of
+	# axe must not lose theirs when ours breaks.
+	var definition := _axe(true)
+	var ours := _bag_with(definition)
+	var theirs := ItemInstance.create(definition, 1)
+
+	ours.wear(theirs, 99.0)
+
+	assert_eq(ours.count(&"item.axe"), 1, "Our axe was destroyed by their wear")

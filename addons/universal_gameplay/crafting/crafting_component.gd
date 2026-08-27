@@ -223,7 +223,7 @@ func _consume(recipe: RecipeDefinition) -> void:
 		elif ingredient.durability_cost > 0.0 and instance.has_durability():
 			# Tools wear rather than vanish. A hammer that broke would be
 			# removed by the inventory's own rules, not by crafting.
-			instance.degrade(ingredient.durability_cost)
+			inventory.wear(instance, ingredient.durability_cost)
 
 
 ## The carried stack that satisfies an ingredient, or null.

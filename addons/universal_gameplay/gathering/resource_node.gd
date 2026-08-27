@@ -124,7 +124,10 @@ func harvest(harvester: Node) -> FrameworkResult:
 
 	var tool := _find_tool(bag)
 	if tool != null and _definition.tool_wear > 0.0 and tool.has_durability():
-		tool.degrade(_definition.tool_wear)
+		# Through the inventory rather than the instance, so a tool that wears
+		# out is destroyed rather than left in the bag as a useless entry the
+		# harvest loop skips forever.
+		bag.wear(tool, _definition.tool_wear)
 
 	var yielded: Array[ItemInstance] = []
 	for drop in table.roll(get_rng()):
