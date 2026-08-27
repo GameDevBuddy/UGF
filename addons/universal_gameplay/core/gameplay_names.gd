@@ -54,6 +54,30 @@ const INPUT_CONTEXT_UI: StringName = &"input.ui"
 const INPUT_CONTEXT_DIALOGUE: StringName = &"input.dialogue"
 const INPUT_CONTEXT_DISABLED: StringName = &"input.disabled"
 
+# --- Semantic damage vocabulary ------------------------------------------
+#
+# Resistances and status effects match on these rather than on an enum Core
+# would have to own. A project is free to invent its own; these are the ones
+# every genre this platform targets ends up needing.
+
+const DAMAGE_PHYSICAL: StringName = &"damage.physical"
+const DAMAGE_BALLISTIC: StringName = &"damage.ballistic"
+const DAMAGE_EXPLOSIVE: StringName = &"damage.explosive"
+const DAMAGE_FIRE: StringName = &"damage.fire"
+const DAMAGE_COLD: StringName = &"damage.cold"
+const DAMAGE_POISON: StringName = &"damage.poison"
+const DAMAGE_FALL: StringName = &"damage.fall"
+const DAMAGE_TRUE: StringName = &"damage.true"
+
+# --- Core stat identifiers -----------------------------------------------
+#
+# Health's maximum is here because Health is a Core-adjacent concern every
+# genre shares. Strength, agility and the rest are game content and are not.
+
+const STAT_HEALTH_MAX: StringName = &"stat.health.max"
+const STAT_STAMINA: StringName = &"stat.stamina"
+const STAT_RESISTANCE: StringName = &"stat.resistance"
+
 # --- Cross-feature event names -------------------------------------------
 # These match the EventBus signal names one-for-one. FrameworkEvent
 # subclasses return one of these from get_event_name().
@@ -79,6 +103,7 @@ const MODULE_LOCOMOTION: StringName = &"module.locomotion"
 const MODULE_INPUT: StringName = &"module.input"
 const MODULE_CAMERA: StringName = &"module.camera"
 const MODULE_ANIMATION: StringName = &"module.animation"
+const MODULE_STATUS_EFFECTS: StringName = &"module.status_effects"
 const MODULE_STATS: StringName = &"module.stats"
 const MODULE_HEALTH: StringName = &"module.health"
 const MODULE_INVENTORY: StringName = &"module.inventory"

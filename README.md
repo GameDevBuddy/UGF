@@ -9,10 +9,11 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 + M1 + M2 complete ✅
+## Status: M0 – M3 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
-runtime entity on top of it. M2 makes that entity a playable character. All three are green.
+runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
+that other systems change, and a way to die. All four are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -71,8 +72,25 @@ runtime entity on top of it. M2 makes that entity a playable character. All thre
 - *AI can issue movement commands* — `..::test_an_ai_and_a_player_reach_the_same_velocity`,
   `..::test_a_character_still_moves_with_no_controller_at_all`
 
+### M3 — Stats + Health + Damage + Effects ✅
+
+| M3 deliverable | Where |
+| --- | --- |
+| Stats + modifiers | `stats/stat_calculator.gd`, `stats_component.gd` |
+| Health | `health_damage/health_component.gd` |
+| Resistance / armour pipeline | `health_damage/damage_pipeline.gd`, `resistance_profile.gd` |
+| Status effects | `status_effects/status_effect_component.gd` |
+| Death event | `health_damage/health_event_adapter.gd` |
+
+**M3 exit gate:**
+
+- *Damage is deterministic* — `test_damage_pipeline.gd::test_the_same_input_gives_the_same_output_every_time`
+- *Death publishes an event* — `test_health.gd::test_the_adapter_publishes_a_death_to_the_bus`
+- *Modifiers stack predictably* — `test_stat_calculator.gd::test_additive_percentages_sum_rather_than_compound`,
+  `..::test_the_result_does_not_depend_on_the_order_they_were_added`
+
 ```
-24 suite(s), 465 test(s), 465 passed, 0 failed, 883 assertions
+29 suite(s), 630 test(s), 630 passed, 0 failed, 1146 assertions
 RESULT: PASS
 ```
 
@@ -286,6 +304,22 @@ addons/universal_gameplay/
 │   ├── character_definition.gd    a scene plus the profiles that configure it
 │   ├── character_controller.gd    player input -> movement. one driver of many
 │   └── character.tscn             the shared character scene
+├── stats/
+│   ├── stat_modifier.gd           one change, and where it came from
+│   ├── stat_calculator.gd         the fixed order modifiers apply in
+│   ├── stat_definition.gd         what a stat is: range, depletion, regen
+│   ├── stats_profile.gd           which stats an entity has, and its bases
+│   └── stats_component.gd         values, modifiers, depletion
+├── health_damage/
+│   ├── resistance_profile.gd      armour and per-tag resistance
+│   ├── damage_pipeline.gd         mitigation. static, deterministic
+│   ├── health_component.gd        one number: still standing or not
+│   ├── damage_receiver_component.gd  the entry point for damage
+│   └── health_event_adapter.gd    the seam that promotes a death to the bus
+├── status_effects/
+│   ├── status_effect_definition.gd  buffs and poisons as data
+│   ├── status_effect_instance.gd    one live application
+│   └── status_effect_component.gd   apply, stack, expire, tick
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -307,14 +341,14 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M2 are done. The build order follows dependency, not feature appeal.
+M0 through M3 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
 | **M0** | **Foundation contract** ✅ | | M10 | Factions + reputation |
 | **M1** | **Entity + save identity** ✅ | | M11 | Commerce + vendors + loot |
 | **M2** | **Character + input + locomotion** ✅ | | M12 | Crafting + survival |
-| M3 | Stats + health + damage + effects | | M13 | Vehicles |
+| **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
 | M4 | Items + inventory + equipment | | M14 | Spawn + world state + traffic |
 | M5 | Interaction platform | | M15 | Crime / heat |
 | M6 | Combat + weapons | | M16 | Full persistence |
