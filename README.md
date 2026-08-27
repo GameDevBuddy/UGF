@@ -60,6 +60,7 @@ runtime entity on top of it. M2 makes that entity a playable character. All thre
 | Camera adapter | `camera/camera_adapter.gd` |
 | AnimationTree adapter | `animation/animation_adapter.gd` |
 | CharacterDefinition | `character/character_definition.gd` |
+| Default input bindings | `input/default_input_bindings.gd` |
 
 **M2 exit gate:**
 
@@ -71,9 +72,15 @@ runtime entity on top of it. M2 makes that entity a playable character. All thre
   `..::test_a_character_still_moves_with_no_controller_at_all`
 
 ```
-23 suite(s), 448 test(s), 448 passed, 0 failed, 825 assertions
+24 suite(s), 465 test(s), 465 passed, 0 failed, 883 assertions
 RESULT: PASS
 ```
+
+Enabling the addon binds the framework's semantic actions to WASD, space, shift, ctrl, E and
+the usual gamepad equivalents, for any action the project has not already defined. It never
+overwrites: rebind `jump` and it stays rebound through every future version of the addon.
+Without this the addon produces a character that compiles, spawns, validates and cannot move —
+and an unbound action is indistinguishable from an unpressed one at runtime.
 
 ---
 
@@ -261,7 +268,8 @@ addons/universal_gameplay/
 │   ├── engine_input_source.gd     the only place that touches Godot's Input
 │   ├── input_context.gd           which actions are live, as a definition
 │   ├── input_contexts.gd          the six standard contexts
-│   └── input_router.gd            the context stack. a service, not an autoload
+│   ├── input_router.gd            the context stack. a service, not an autoload
+│   └── default_input_bindings.gd  WASD and a gamepad, so the addon works enabled
 ├── locomotion/
 │   ├── movement_profile.gd        speeds, acceleration, jump. reusable data
 │   ├── movement_intent.gd         what something wants, with no idea who asked
