@@ -570,3 +570,41 @@ func test_a_character_with_no_combat_still_drives() -> void:
 	source.hold(GameplayNames.ACTION_MOVE_FORWARD)
 	_drive()
 	assert_true(movement.is_moving())
+
+
+# --- Possession -----------------------------------------------------------
+#
+# The handoff the M2 exit gate promised and M7 spends: an NPC a player takes
+# over stops thinking, and gets its own mind back when they leave.
+
+func _wire_ai() -> AIControllerComponent:
+	var ai := AIControllerComponent.new()
+	ai.auto_tick = false
+	ai.role_override = AIFixtures.guard()
+	entity.add_child(ai)
+	ai.initialize(EntityContext.create(entity, definition))
+	controller.ai = ai
+	return ai
+
+
+func test_taking_control_switches_the_ai_off() -> void:
+	var ai := _wire_ai()
+	assert_true(ai.is_active())
+	controller.take_control()
+	assert_false(ai.is_active())
+
+
+func test_releasing_control_gives_the_npc_its_mind_back() -> void:
+	var ai := _wire_ai()
+	controller.take_control()
+	controller.release_control()
+	assert_true(ai.is_active())
+
+
+func test_a_character_with_no_ai_is_controlled_normally() -> void:
+	# The AI module is optional; possessing a character that has none must not
+	# be an error (rule 31).
+	assert_ok(controller.take_control())
+	source.hold(GameplayNames.ACTION_MOVE_FORWARD)
+	_drive()
+	assert_true(movement.is_moving())

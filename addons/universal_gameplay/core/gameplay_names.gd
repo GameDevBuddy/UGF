@@ -21,6 +21,11 @@ const GROUP_DAMAGEABLE: StringName = &"damageable"
 const GROUP_SAVEABLE: StringName = &"saveable"
 const GROUP_ENTITY: StringName = &"framework_entity"
 
+## Something an NPC's senses can pick up. Membership is a decision the
+## entity's composition makes, through [Perceivable] -- a destructible crate
+## is not something a guard stares at, and a possessed vehicle is.
+const GROUP_PERCEIVABLE: StringName = &"perceivable"
+
 # --- Semantic state vocabulary -------------------------------------------
 
 const STATE_DEAD: StringName = &"state.dead"
@@ -33,6 +38,8 @@ const STATE_INTERACTING: StringName = &"state.interacting"
 const STATE_ATTACKING: StringName = &"state.attacking"
 const STATE_RELOADING: StringName = &"state.reloading"
 const STATE_AIMING: StringName = &"state.aiming"
+const STATE_ALERTED: StringName = &"state.alerted"
+const STATE_FLEEING: StringName = &"state.fleeing"
 
 ## Set by [ToggleStateAction] on anything that opens: a door, a chest, a hatch.
 ## Generic enough to be framework vocabulary; a game's own states are not
@@ -111,6 +118,19 @@ const STAT_RESISTANCE: StringName = &"stat.resistance"
 # subclasses return one of these from get_event_name().
 
 const EVENT_ACTOR_DIED: StringName = &"actor_died"
+
+# --- AI activity names ---------------------------------------------------
+#
+# What a brain reports it is doing. Vocabulary rather than an enum, so a
+# project's own brain can invent states the framework never heard of without
+# Core having to grow a case for them (rule 32).
+
+const AI_STATE_IDLE: StringName = &"ai.idle"
+const AI_STATE_WANDER: StringName = &"ai.wander"
+const AI_STATE_INVESTIGATE: StringName = &"ai.investigate"
+const AI_STATE_ENGAGE: StringName = &"ai.engage"
+const AI_STATE_FLEE: StringName = &"ai.flee"
+const AI_STATE_DEAD: StringName = &"ai.dead"
 
 # --- Core service identifiers --------------------------------------------
 

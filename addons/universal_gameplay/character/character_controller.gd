@@ -53,6 +53,12 @@ signal control_changed(controlling: bool)
 ## AI issues. Absent, the buttons do nothing and everything else works.
 @export var combat: CombatComponent
 
+## Optional AI, switched off while a player is driving and back on when they
+## let go. That handoff is the whole of possession from the AI's side: an NPC
+## the player takes over stops thinking, and gets its own mind back when they
+## leave (Implementation Plan 22).
+@export var ai: AIControllerComponent
+
 var _router: InputRouter = null
 var _input_context: InputContext = null
 var _controlling: bool = false
@@ -111,6 +117,8 @@ func take_control() -> FrameworkResult:
 
 	_controlling = true
 	_set_ticking(true)
+	if ai != null:
+		ai.set_active(false)
 	if camera != null:
 		# Taking control is what decides whose view the player sees. The scene
 		# does not mark its camera current on spawn, because every NPC is built
@@ -140,6 +148,8 @@ func release_control() -> FrameworkResult:
 	if movement != null:
 		movement.stop()
 		movement.set_crouching(false)
+	if ai != null:
+		ai.set_active(true)
 	control_changed.emit(false)
 	return FrameworkResult.ok(self)
 

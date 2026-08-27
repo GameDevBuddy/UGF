@@ -9,12 +9,13 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M6 complete ✅
+## Status: M0 – M7 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
-it a way to use the world. M6 gives it a way to fight. All seven are green.
+it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
+without a player. All eight are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -138,8 +139,25 @@ it a way to use the world. M6 gives it a way to fight. All seven are green.
 - *AI and player use the same command API* —
   `test_combat_component.gd::test_an_npc_attacks_through_the_same_call_a_player_does`
 
+### M7 — AI + NPC Roles ✅
+
+| M7 deliverable | Where |
+| --- | --- |
+| AIControllerComponent | `ai/ai_controller_component.gd` |
+| Perception | `ai/perception_component.gd`, `perception_profile.gd`, `perceivable.gd` |
+| Memory | `ai/ai_memory.gd`, `memory_entry.gd` |
+| BrainAdapter | `ai/ai_brain.gd`, `role_brain.gd` |
+| NavigationAgent3D integration | `ai/navigation_adapter.gd` |
+| Vendor / guard / civilian role profiles | `ai/npc_role_definition.gd` |
+
+**M7 exit gate:**
+
+- *Civilian, guard and combatant built from the same character base* —
+  `test_npc_roles.gd::test_all_three_roles_are_the_same_composition` and
+  `::test_and_do_three_different_things_about_it`
+
 ```
-43 suite(s), 1036 test(s), 1036 passed, 0 failed, 2130 assertions
+49 suite(s), 1163 test(s), 1163 passed, 0 failed, 2393 assertions
 RESULT: PASS
 ```
 
@@ -397,6 +415,21 @@ addons/universal_gameplay/
 │   ├── equipment_slot_definition.gd  one place a thing can be worn
 │   ├── loadout_profile.gd         which slots, and what is worn to start
 │   └── equipment_component.gd     wearing things, sourced per instance
+├── ai/
+│   ├── perception_solver.gd       the geometry of noticing. static, no node
+│   ├── perception_provider.gd     where perception asks the world
+│   ├── physics_perception_provider.gd  the only AI file touching physics
+│   ├── perception_profile.gd      what it can notice, and for how long
+│   ├── perceivable.gd             this can be noticed, and how easily
+│   ├── perception_component.gd    sight, hearing, and a memory that fades
+│   ├── memory_entry.gd            what it knows about one other entity
+│   ├── ai_memory.gd               everything it knows. it forgets on purpose
+│   ├── ai_context.gd              everything a brain is given to think with
+│   ├── ai_brain.gd                what to do next. a resource, no state
+│   ├── role_brain.gd              one brain, three stances: the exit gate
+│   ├── npc_role_definition.gd     civilian, guard, combatant, vendor
+│   ├── navigation_adapter.gd      a navmesh when there is one, straight when not
+│   └── ai_controller_component.gd drives a character. same API the player uses
 ├── combat/
 │   ├── combat_solver.gd           spread, recoil, falloff, arcs, attack phases
 │   ├── hit_provider.gd            where combat asks the world what it hit
@@ -447,7 +480,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M6 are done. The build order follows dependency, not feature appeal.
+M0 through M7 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -458,7 +491,7 @@ M0 through M6 are done. The build order follows dependency, not feature appeal.
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
-| M7 | AI + NPC roles | | M17 | UI framework + debug tooling |
+| **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |
 | M8 | Dialogue + narrative state | | M18 | Networking adapter |
 | M9 | Missions + objectives | | M19 | Packaging + documentation |
 
