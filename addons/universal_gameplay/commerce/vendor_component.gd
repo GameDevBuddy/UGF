@@ -25,6 +25,9 @@ signal restocked(added: int)
 var _definition: VendorDefinition = null
 var _stock: Array[StockEntry] = []
 var _since_restock: float = 0.0
+## Injected so a rotating or generated shop is reproducible in a test and
+## identical on two network clients, the same reason LootComponent takes one.
+var _rng: RandomNumberGenerator = null
 var _customer: Node = null
 
 
@@ -38,7 +41,7 @@ func initialize(context: EntityContext) -> void:
 	super(context)
 	_definition = _resolve_definition()
 	if _stock.is_empty() and _definition != null:
-		_stock = _definition.build_stock()
+		_stock = _definition.build_stock(get_rng(), _roll_table)
 	set_physics_process(auto_tick and _restocks())
 
 
@@ -168,7 +171,14 @@ func give_stock(item_id: StringName, quantity: int) -> int:
 
 
 ## Refills every shelf line towards its ceiling.
+##
+## A rotating or generated shop rebuilds its shelf instead, because for those
+## two "restock" means a new selection rather than more of the same. Topping up
+## a rotating shop's current lines would make the rotation never happen.
 func restock() -> int:
+	if _definition != null and _definition.stock_mode != VendorDefinition.StockMode.FIXED:
+		return _rebuild_shelf()
+
 	var added := 0
 	for entry in _stock:
 		if entry != null:
@@ -178,6 +188,36 @@ func restock() -> int:
 		stock_changed.emit()
 		restocked.emit(added)
 	return added
+
+
+## Replaces the shelf with a fresh selection, for a rotating or generated shop.
+##
+## Anything the customer sold to this vendor is kept. A fence that forgot what
+## you sold it every time it rotated would eat the player's goods, and "the
+## shop lost my sword" is a bug report nobody enjoys.
+func _rebuild_shelf() -> int:
+	var authored: Dictionary[StringName, bool] = {}
+	if _definition != null:
+		for entry in _definition.stock:
+			if entry != null:
+				authored[entry.item_id] = true
+
+	var kept: Array[StockEntry] = []
+	for entry in _stock:
+		if entry != null and not authored.has(entry.item_id) and entry.quantity > 0:
+			kept.append(entry)
+
+	_stock = _definition.build_stock(get_rng(), _roll_table)
+	_stock.append_array(kept)
+	_since_restock = 0.0
+
+	var total := 0
+	for entry in _stock:
+		if entry != null:
+			total += maxi(0, entry.quantity)
+	stock_changed.emit()
+	restocked.emit(total)
+	return total
 
 
 ## Restocks only if the interval has elapsed.
@@ -198,6 +238,38 @@ func tick(delta: float) -> void:
 		return
 	_since_restock += delta
 	restock_if_due()
+
+
+## The generator behind a rotating or generated shelf.
+##
+## Created on first use rather than in [method initialize], so a fixed shop --
+## the common case -- never allocates one.
+func get_rng() -> RandomNumberGenerator:
+	if _rng == null:
+		_rng = RandomNumberGenerator.new()
+		_rng.randomize()
+	return _rng
+
+
+func set_rng(rng: RandomNumberGenerator) -> void:
+	_rng = rng
+
+
+## Rolls a loot table by id, for a generated shelf.
+##
+## Returns an empty array when Loot is not installed or the table is not
+## registered, which makes the definition fall back to its authored shelf.
+## Commerce never learns what a loot table is -- only what one produces
+## (rule 9).
+func _roll_table(table_id: StringName) -> Array:
+	var context := get_context()
+	var core := context.core if context != null else null
+	if core == null or not core.has_method("get_definition"):
+		return []
+	var table: Object = core.call("get_definition", table_id)
+	if table == null or not table.has_method("roll"):
+		return []
+	return table.call("roll", get_rng())
 
 
 # --- Discovery ------------------------------------------------------------
@@ -234,7 +306,7 @@ func capture_state() -> Dictionary:
 func restore_state(data: Dictionary) -> void:
 	_since_restock = float(data.get("since_restock", 0.0))
 	if _stock.is_empty() and _definition != null:
-		_stock = _definition.build_stock()
+		_stock = _definition.build_stock(get_rng(), _roll_table)
 	# Matched by item id rather than by index, so a shelf reordered or extended
 	# between versions restores what it can instead of putting the wrong count
 	# on the wrong line.

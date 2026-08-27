@@ -2,9 +2,50 @@ class_name VendorDefinition
 extends FrameworkDefinition
 ## What a shop is: what it stocks, what it charges, and how often it refills.
 
+## How the shelf is decided.
+##
+## The plan lists five stock policies: fixed, generated, rotating, finite and
+## unlimited. Finite and unlimited are per-line and already live on
+## [StockEntry] as its quantity -- minus one is unlimited, anything else is
+## finite. The three here are per-shop, because they are decisions about the
+## shelf rather than about one line on it.
+enum StockMode {
+	## Every authored line is on the shelf. What a shop is unless it says
+	## otherwise.
+	FIXED,
+	## Only [member rotating_slots] of the authored lines are stocked at a
+	## time, reshuffled on each restock. The travelling merchant whose wares
+	## are different every week, authored as one list rather than seven.
+	ROTATING,
+	## The shelf is rolled from a loot table on each restock. The fence whose
+	## stock is whatever came in, without anybody authoring what that is.
+	GENERATED,
+}
+
+@export var stock_mode: StockMode = StockMode.FIXED
+
 ## The shelf. Copied per vendor at runtime, so one shop selling out does not
 ## empty every shop pointed at this resource.
+##
+## Under [constant StockMode.ROTATING] this is the pool to draw from rather
+## than the shelf itself. Under [constant StockMode.GENERATED] it is the
+## fallback for when the table cannot be resolved -- a shop with an empty
+## shelf and no error is worse than a shop with its authored one.
 @export var stock: Array[StockEntry] = []
+
+@export_group("Rotating stock")
+## How many authored lines are live at once. Zero or more than the pool means
+## all of them, which makes rotation a no-op rather than an error.
+@export_range(0, 999) var rotating_slots: int = 0
+
+@export_group("Generated stock")
+## Loot table rolled to build the shelf. Named by id rather than held, so
+## Commerce and Loot do not have to load each other (rule 32).
+@export var generated_table_id: StringName = &""
+
+## Ceiling put on each generated line, so a lucky roll does not produce a shop
+## with four hundred of something.
+@export_range(1, 9999) var generated_maximum: int = 5
 
 ## What it charges. Null prices everything at base value, which is a valid
 ## shop and a very generous one.
@@ -35,12 +76,79 @@ func get_pricing() -> PricingPolicy:
 
 
 ## A live copy of the shelf. Every vendor gets its own.
-func build_stock() -> Array[StockEntry]:
+##
+## [param rng] and [param roll_table] are supplied by the component and are
+## optional: with neither, a rotating shop stocks its whole pool and a
+## generated one falls back to its authored lines. That is what keeps a
+## definition rollable in a test with no registry and no RNG (rule 33).
+func build_stock(
+	rng: RandomNumberGenerator = null, roll_table: Callable = Callable()
+) -> Array[StockEntry]:
+	match stock_mode:
+		StockMode.ROTATING:
+			return _rotate(rng)
+		StockMode.GENERATED:
+			var generated := _generate(roll_table)
+			if not generated.is_empty():
+				return generated
+			# Fall through to the authored shelf. A shop with nothing on it and
+			# no error is a bug report reading "the merchant sells nothing".
 	var copies: Array[StockEntry] = []
 	for entry in stock:
 		if entry != null:
 			copies.append(entry.duplicate_entry())
 	return copies
+
+
+## Picks [member rotating_slots] lines from the pool, without repeats.
+func _rotate(rng: RandomNumberGenerator) -> Array[StockEntry]:
+	var pool: Array[StockEntry] = []
+	for entry in stock:
+		if entry != null:
+			pool.append(entry)
+	if rotating_slots <= 0 or rotating_slots >= pool.size() or rng == null:
+		var all: Array[StockEntry] = []
+		for entry in pool:
+			all.append(entry.duplicate_entry())
+		return all
+
+	var chosen: Array[StockEntry] = []
+	for _slot in rotating_slots:
+		if pool.is_empty():
+			break
+		var index := rng.randi_range(0, pool.size() - 1)
+		chosen.append(pool[index].duplicate_entry())
+		pool.remove_at(index)
+	return chosen
+
+
+## Turns a loot roll into shelf lines.
+##
+## [param roll_table] takes the table id and returns the same
+## item-id-and-quantity dictionaries [method LootTableDefinition.roll] does, so
+## Commerce never learns what a loot table is -- only what one produces.
+func _generate(roll_table: Callable) -> Array[StockEntry]:
+	var built: Array[StockEntry] = []
+	if generated_table_id == &"" or not roll_table.is_valid():
+		return built
+
+	var drops: Variant = roll_table.call(generated_table_id)
+	if not (drops is Array):
+		return built
+
+	for drop in drops:
+		var item_id: StringName = drop.get("item_id", &"")
+		if item_id == &"":
+			continue
+		var quantity: int = mini(int(drop.get("quantity", 1)), generated_maximum)
+		if quantity <= 0:
+			continue
+		var entry := StockEntry.new()
+		entry.item_id = item_id
+		entry.quantity = quantity
+		entry.maximum = generated_maximum
+		built.append(entry)
+	return built
 
 
 func validate() -> ValidationResult:
