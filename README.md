@@ -9,12 +9,12 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M5 complete ✅
+## Status: M0 – M6 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
 that other systems change, and a way to die. M4 gives it things to carry and wear. M5 gives
-it a way to use the world. All six are green.
+it a way to use the world. M6 gives it a way to fight. All seven are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -121,8 +121,25 @@ it a way to use the world. All six are green.
 - *Door, pickup, NPC and vehicle on one pipeline* —
   `test_interaction_pipeline.gd::test_all_four_are_the_same_component_and_the_same_call`
 
+### M6 — Combat + Weapons ✅
+
+| M6 deliverable | Where |
+| --- | --- |
+| Hitscan / projectile | `combat/hitscan_delivery.gd`, `projectile_delivery.gd`, `projectile.gd` |
+| Ammo / reload | `combat/ammo_profile.gd`, `weapon_component.gd` |
+| Recoil / spread | `combat/recoil_profile.gd`, `combat_solver.gd` |
+| Melee action windows | `combat/attack_definition.gd`, `melee_delivery.gd` |
+| Targeting hooks | `CombatComponent.aim_at`, `set_hit_provider` |
+
+**M6 exit gate:**
+
+- *Ranged and melee share DamageContext* —
+  `test_combat_component.gd::test_both_produce_the_same_damage_context`
+- *AI and player use the same command API* —
+  `test_combat_component.gd::test_an_npc_attacks_through_the_same_call_a_player_does`
+
 ```
-37 suite(s), 845 test(s), 845 passed, 0 failed, 1603 assertions
+43 suite(s), 1036 test(s), 1036 passed, 0 failed, 2130 assertions
 RESULT: PASS
 ```
 
@@ -281,6 +298,14 @@ scene-layout bug. Every M2 component recomputes the condition instead:
 set_physics_process(is_initialized() and auto_tick and body != null)
 ```
 
+**A lambda captures a value type by value, so a counter incremented inside one never
+changes.** `var hits := 0` followed by `signal.connect(func(): hits += 1)` compiles, runs, and
+asserts `hits == 0` forever — the lambda increments its own copy. It is the quietest way to
+write a test that passes for no reason: the assertion that survives is usually
+`assert_eq(count, 0)`, which is exactly what a test of "this does not fire" looks like. Count
+into an `Array` instead; arrays are captured by reference and `append` reaches the enclosing
+scope.
+
 **A `Resource` that stores the context it was handed leaks the whole graph.** The CI gate fails
 on `ObjectDB instances were leaked at exit`, and this is the easiest way to trip it. An
 `InteractionContext` holds the `InteractionDefinition`, which holds the `InteractionAction` —
@@ -372,6 +397,24 @@ addons/universal_gameplay/
 │   ├── equipment_slot_definition.gd  one place a thing can be worn
 │   ├── loadout_profile.gd         which slots, and what is worn to start
 │   └── equipment_component.gd     wearing things, sourced per instance
+├── combat/
+│   ├── combat_solver.gd           spread, recoil, falloff, arcs, attack phases
+│   ├── hit_provider.gd            where combat asks the world what it hit
+│   ├── physics_hit_provider.gd    the only place combat touches the physics server
+│   ├── combat_hit.gd              one thing an attack connected with
+│   ├── attack_definition.gd       one attack: cost, timing, reach, damage
+│   ├── attack_context.gd          everything one swing or shot knows
+│   ├── attack_delivery.gd         how an attack reaches what it is aimed at
+│   ├── melee_delivery.gd          an arc, within reach
+│   ├── hitscan_delivery.gd        a shot that arrives instantly. pellets, falloff
+│   ├── projectile_delivery.gd     a shot that takes time to arrive
+│   ├── projectile.gd / .tscn      in flight, sweeping rather than teleporting
+│   ├── weapon_profile.gd          what makes an item a weapon
+│   ├── ammo_profile.gd            magazine, reserve, reload, or none of it
+│   ├── recoil_profile.gd          how aim degrades, and how it settles
+│   ├── combat_profile.gd          how an entity fights with empty hands
+│   ├── weapon_component.gd        ammunition, reloading, aim drift
+│   └── combat_component.gd        the attack state machine. one command API
 ├── interaction/
 │   ├── interaction_definition.gd  one thing that can be done to something
 │   ├── interaction_context.gd     everything one attempt knows about itself
@@ -404,7 +447,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M5 are done. The build order follows dependency, not feature appeal.
+M0 through M6 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -414,7 +457,7 @@ M0 through M5 are done. The build order follows dependency, not feature appeal.
 | **M3** | **Stats + health + damage + effects** ✅ | | M13 | Vehicles |
 | **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
-| M6 | Combat + weapons | | M16 | Full persistence |
+| **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
 | M7 | AI + NPC roles | | M17 | UI framework + debug tooling |
 | M8 | Dialogue + narrative state | | M18 | Networking adapter |
 | M9 | Missions + objectives | | M19 | Packaging + documentation |

@@ -66,6 +66,22 @@ static func get_bindings() -> Dictionary[StringName, Array]:
 		_key(KEY_E),
 		_joy_button(JOY_BUTTON_X),
 	]
+	bindings[GameplayNames.ACTION_ATTACK] = [
+		_mouse_button(MOUSE_BUTTON_LEFT),
+		_joy_axis(JOY_AXIS_TRIGGER_RIGHT, 1.0),
+	]
+	bindings[GameplayNames.ACTION_ATTACK_SECONDARY] = [
+		_mouse_button(MOUSE_BUTTON_RIGHT),
+		_joy_button(JOY_BUTTON_RIGHT_SHOULDER),
+	]
+	bindings[GameplayNames.ACTION_AIM] = [
+		_mouse_button(MOUSE_BUTTON_RIGHT),
+		_joy_axis(JOY_AXIS_TRIGGER_LEFT, 1.0),
+	]
+	bindings[GameplayNames.ACTION_RELOAD] = [
+		_key(KEY_R),
+		_joy_button(JOY_BUTTON_Y),
+	]
 	return bindings
 
 
@@ -160,6 +176,12 @@ static func get_unbound_actions() -> Array[StringName]:
 static func _key(keycode: Key) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.physical_keycode = keycode
+	return event
+
+
+static func _mouse_button(button: MouseButton) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = button
 	return event
 
 
