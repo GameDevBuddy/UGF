@@ -58,6 +58,12 @@ const STATE_ENGINE_RUNNING: StringName = &"state.engine.running"
 ## Set while a vehicle is under its own power and moving.
 const STATE_DRIVING: StringName = &"state.driving"
 
+## Set on somebody the law is looking for. Framework vocabulary because every
+## genre with a law system needs the word, and because it is the whole
+## interface between Crime and AI: a guard's brain asks whether somebody is
+## wanted and never what their heat is (rule 32).
+const STATE_WANTED: StringName = &"state.wanted"
+
 # --- Semantic interaction verbs ------------------------------------------
 #
 # What an interaction is, independent of the prose shown for it. Presentation
@@ -146,6 +152,8 @@ const EVENT_LOOT_GENERATED: StringName = &"loot_generated"
 const EVENT_VEHICLE_ENTERED: StringName = &"vehicle_entered"
 const EVENT_VEHICLE_EXITED: StringName = &"vehicle_exited"
 const EVENT_VEHICLE_DESTROYED: StringName = &"vehicle_destroyed"
+const EVENT_CRIME_WITNESSED: StringName = &"crime_witnessed"
+const EVENT_WANTED_CHANGED: StringName = &"wanted_changed"
 
 # --- AI activity names ---------------------------------------------------
 #
@@ -186,6 +194,7 @@ const SERVICE_INPUT: StringName = &"service.input"
 const SERVICE_NARRATIVE: StringName = &"service.narrative"
 const SERVICE_FACTION: StringName = &"service.faction"
 const SERVICE_COMMERCE: StringName = &"service.commerce"
+const SERVICE_CRIME: StringName = &"service.crime"
 
 # --- Core module identifiers ---------------------------------------------
 # Feature modules declare these in their manifest. Core is not listed: it is
@@ -216,6 +225,7 @@ const MODULE_GATHERING: StringName = &"module.gathering"
 const MODULE_CRAFTING: StringName = &"module.crafting"
 const MODULE_SURVIVAL: StringName = &"module.survival"
 const MODULE_VEHICLES: StringName = &"module.vehicles"
+const MODULE_CRIME: StringName = &"module.crime"
 const MODULE_WORLD_STATE: StringName = &"module.world_state"
 const MODULE_SPAWN: StringName = &"module.spawn"
 const MODULE_SAVE: StringName = &"module.save"
