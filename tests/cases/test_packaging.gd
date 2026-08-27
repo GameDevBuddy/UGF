@@ -119,12 +119,27 @@ func test_dependencies_come_before_the_modules_that_require_them() -> void:
 		seen.append(id)
 
 
-func test_the_order_is_the_same_every_run() -> void:
-	# An unstable registration order turns a dependency bug into an
-	# intermittent one, which is the most expensive kind to find.
-	var first: Array = ModuleCatalog.resolve_order(ModuleCatalog.get_ids()).payload
-	var second: Array = ModuleCatalog.resolve_order(ModuleCatalog.get_ids()).payload
-	assert_eq(first, second)
+func test_the_order_is_alphabetical_within_each_dependency_tier() -> void:
+	# Comparing two calls in one process would prove nothing: the original
+	# version of this test did exactly that and passed while the order was
+	# built on Array[StringName].sort(), which orders by intern-table address
+	# and so differs between the editor, a headless run and an export.
+	#
+	# Alphabetical is a property of the ids themselves, so asserting it is
+	# what actually pins the order across processes.
+	var ids := ModuleCatalog.get_ids()
+	for index in range(1, ids.size()):
+		assert_true(
+			str(ids[index - 1]) < str(ids[index]),
+			"get_ids() is not alphabetical: %s came before %s" % [ids[index - 1], ids[index]]
+		)
+
+	var tier := ModuleCatalog.resolve_order([&"module.entity", &"module.input", &"module.narrative"])
+	assert_eq(
+		tier.payload,
+		[&"module.entity", &"module.input", &"module.narrative"],
+		"Three modules with no dependencies should come out in name order"
+	)
 
 
 func test_optional_dependencies_do_not_constrain_the_order() -> void:

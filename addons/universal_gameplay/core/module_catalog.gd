@@ -63,8 +63,23 @@ const MODULES: Dictionary[StringName, String] = {
 static func get_ids() -> Array[StringName]:
 	var ids: Array[StringName] = []
 	ids.assign(MODULES.keys())
-	ids.sort()
+	sort_ids(ids)
 	return ids
+
+
+## Sorts module ids alphabetically, in place.
+##
+## [b]Array[StringName].sort() does not do this.[/b] StringNames compare by
+## their address in the engine's intern table, so sorting them yields the order
+## those names were first created in -- which depends on which scripts the
+## engine happened to load first, and therefore differs between the editor, a
+## headless run and an exported build.
+##
+## Everywhere ordering is user-visible or has to be reproducible, that is the
+## wrong order and it is wrong in the worst way: deterministic within a single
+## process, so it looks stable right up until it changes between builds.
+static func sort_ids(ids: Array[StringName]) -> void:
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return str(a) < str(b))
 
 
 static func has(id: StringName) -> bool:
@@ -127,7 +142,7 @@ static func get_implied_requirements(requested: Array[StringName]) -> Array[Stri
 
 	var result: Array[StringName] = []
 	result.assign(implied.keys())
-	result.sort()
+	sort_ids(result)
 	return result
 
 
@@ -181,8 +196,10 @@ static func resolve_order(requested: Array[StringName]) -> FrameworkResult:
 		)
 
 	# Repeatedly take the modules whose dependencies are all placed. Ids are
-	# sorted within each pass so the order is stable run to run -- an unstable
-	# registration order turns a dependency bug into an intermittent one.
+	# sorted alphabetically within each pass -- see sort_ids -- so the order is
+	# the same in every process. An order that varies between the editor and an
+	# exported build turns a dependency bug into one that only reproduces after
+	# shipping.
 	var ordered: Array[StringName] = []
 	var placed: Dictionary[StringName, bool] = {}
 	while ordered.size() < wanted.size():
@@ -203,13 +220,13 @@ static func resolve_order(requested: Array[StringName]) -> FrameworkResult:
 			for id in edges:
 				if not placed.has(id):
 					stuck.append(id)
-			stuck.sort()
+			sort_ids(stuck)
 			return FrameworkResult.fail(
 				&"catalog.dependency_cycle",
 				"These modules require each other, directly or through others: %s." % str(stuck)
 			)
 
-		ready_now.sort()
+		sort_ids(ready_now)
 		for id in ready_now:
 			placed[id] = true
 			ordered.append(id)
