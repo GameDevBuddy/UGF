@@ -62,8 +62,13 @@ func get_seat_count() -> int:
 
 
 func get_occupant(seat_id: StringName) -> Node:
-	var occupant: Node = _occupants.get(seat_id)
-	return occupant if occupant != null and is_instance_valid(occupant) else null
+	# Variant, not Node. Assigning a freed instance to a typed local throws
+	# before is_instance_valid() can be reached, so an occupant that was freed
+	# out from under the vehicle would crash the read rather than answer null.
+	var candidate: Variant = _occupants.get(seat_id)
+	if candidate == null or not is_instance_valid(candidate):
+		return null
+	return candidate as Node
 
 
 func get_occupants() -> Array[Node]:

@@ -51,9 +51,11 @@ func _exit_tree() -> void:
 	# Every entity still inside must have the modifier lifted, or an unloaded
 	# zone would go on freezing people who walked out of the level.
 	for entity_id in _inside.keys():
-		var needs: NeedsComponent = _inside[entity_id]
-		if needs != null and is_instance_valid(needs):
-			_lift_from(needs)
+		# Variant, not NeedsComponent: assigning a freed instance to a typed
+		# local throws before is_instance_valid() can be reached.
+		var candidate: Variant = _inside[entity_id]
+		if candidate != null and is_instance_valid(candidate):
+			_lift_from(candidate as NeedsComponent)
 	_inside.clear()
 	if area == null:
 		return
@@ -103,10 +105,10 @@ func apply_to(entity: Node) -> bool:
 func lift_from(entity: Node) -> bool:
 	if entity == null or not contains(entity):
 		return false
-	var needs: NeedsComponent = _inside[entity.get_instance_id()]
+	var candidate: Variant = _inside[entity.get_instance_id()]
 	_inside.erase(entity.get_instance_id())
-	if needs != null and is_instance_valid(needs):
-		_lift_from(needs)
+	if candidate != null and is_instance_valid(candidate):
+		_lift_from(candidate as NeedsComponent)
 	entity_exited.emit(entity)
 	return true
 
