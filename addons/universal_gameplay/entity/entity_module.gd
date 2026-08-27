@@ -25,4 +25,5 @@ func get_manifest() -> ModuleManifest:
 			"Definition binding, persistent identity, semantic state and "
 			+ "entity state capture/restore."
 		)
+		_manifest.parse_requires = []
 	return _manifest

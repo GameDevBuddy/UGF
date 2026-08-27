@@ -30,4 +30,8 @@ func get_manifest() -> ModuleManifest:
 		)
 		_manifest.requires = [GameplayNames.MODULE_ENTITY]
 		_manifest.optional = [GameplayNames.MODULE_LOCOMOTION]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_ENTITY,
+			GameplayNames.MODULE_LOCOMOTION,
+		]
 	return _manifest

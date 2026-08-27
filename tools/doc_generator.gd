@@ -64,6 +64,7 @@ static func build_module_reference() -> String:
 		)
 
 	lines.append("")
+	lines.append_array(_removability_section())
 	lines.append("## What each module is for")
 	lines.append("")
 	for id in ModuleCatalog.get_ids():
@@ -76,6 +77,141 @@ static func build_module_reference() -> String:
 		lines.append("")
 
 	return "\n".join(lines)
+
+
+## The part of the module reference that answers "which folders can I delete?".
+##
+## Generated from [member ModuleManifest.parse_requires], which
+## [code]test_module_removability.gd[/code] keeps equal to what the source
+## actually names. Deleting a folder is a different question from leaving a
+## module out of the enabled list, and it is the one rule 10 is about.
+static func _removability_section() -> Array[String]:
+	var lines: Array[String] = []
+	lines.append("## Deleting a module")
+	lines.append("")
+	lines.append("Enabling a module and *having* it are different things. The table above is")
+	lines.append("about enablement: what must be registered for a feature to work. This section")
+	lines.append("is about the folder on disk.")
+	lines.append("")
+	lines.append("GDScript resolves every class name a script mentions when that script is")
+	lines.append("parsed -- before anything is registered, and whether or not it ever is. So a")
+	lines.append("module can be genuinely optional to *enable* and still be impossible to")
+	lines.append("*delete*, because a sibling names one of its classes in a type annotation.")
+	lines.append("Both facts are true at once, and only the first one used to be written down.")
+	lines.append("")
+
+	var standalone: Array[StringName] = []
+	for id in ModuleCatalog.get_ids():
+		if _dependents_of(id).is_empty():
+			standalone.append(id)
+	ModuleCatalog.sort_ids(standalone)
+
+	lines.append(
+		(
+			"**%d of the %d modules can be deleted on their own.** Nothing else names "
+			+ "their classes, so removing the folder leaves every remaining module parsing:"
+		) % [standalone.size(), ModuleCatalog.get_ids().size()]
+	)
+	lines.append("")
+	for id in standalone:
+		lines.append("- `%s` — `%s/`" % [id, ModuleCatalog.get_script_path(id).get_base_dir().replace(ADDON_ROOT + "/", "")])
+	lines.append("")
+	lines.append("For the rest, deleting the folder means deleting what parses against it too.")
+	lines.append("This is the full list, so a project trimming the addon can work out what a")
+	lines.append("removal actually costs before making it:")
+	lines.append("")
+	lines.append("| Deleting | Cost | Also requires deleting |")
+	lines.append("| --- | --- | --- |")
+	for id in ModuleCatalog.get_ids():
+		var fallout := _deletion_fallout(id)
+		if fallout.is_empty():
+			continue
+		lines.append(
+			"| `%s` | %d more | %s |" % [id, fallout.size(), _id_list(fallout)]
+		)
+	lines.append("")
+
+	lines.append("After trimming, check the result rather than trusting this table:")
+	lines.append("")
+	lines.append("```")
+	lines.append("godot --headless --path . --import")
+	lines.append("godot --headless --path . --script tools/check_removability.gd")
+	lines.append("```")
+	lines.append("")
+	lines.append("It loads every remaining script and names any that no longer parse. Worth")
+	lines.append("running because a missing module is quiet: `--import` returns success on a")
+	lines.append("project whose scripts cannot parse, and the engine only reports a missing")
+	lines.append("class when something loads the script that names it -- which for a")
+	lines.append("definition type may not be until the day you open the scene that uses it.")
+	lines.append("")
+
+	var mutual := _mutual_pairs()
+	if not mutual.is_empty():
+		lines.append("### Modules that cannot be separated")
+		lines.append("")
+		lines.append("Some pairs name each other's classes, so neither can be deleted without the")
+		lines.append("other and the chain above runs in both directions. These are not a bug on")
+		lines.append("their own -- two modules that genuinely describe one idea will do this --")
+		lines.append("but they are the places where the module boundary is doing least work:")
+		lines.append("")
+		for pair in mutual:
+			lines.append("- %s" % pair)
+		lines.append("")
+	return lines
+
+
+## Pairs of modules that each name the other's classes.
+static func _mutual_pairs() -> Array[String]:
+	var pairs: Array[String] = []
+	for a in ModuleCatalog.get_ids():
+		for b in ModuleCatalog.get_ids():
+			if str(a) >= str(b):
+				continue
+			if (
+				ModuleCatalog.get_manifest(a).parse_requires.has(b)
+				and ModuleCatalog.get_manifest(b).parse_requires.has(a)
+			):
+				pairs.append("`%s` ↔ `%s`" % [a, b])
+	pairs.sort()
+	return pairs
+
+
+## Modules that cannot parse without [param id]'s files.
+static func _dependents_of(id: StringName) -> Array[StringName]:
+	var dependents: Array[StringName] = []
+	for other in ModuleCatalog.get_ids():
+		if other == id:
+			continue
+		if ModuleCatalog.get_manifest(other).parse_requires.has(id):
+			dependents.append(other)
+	ModuleCatalog.sort_ids(dependents)
+	return dependents
+
+
+## Everything that has to go when [param id] goes, following the chain.
+##
+## Transitive, because the fallout is: deleting Entity breaks Factions, and
+## anything that names a Factions class breaks with it. A direct-dependents
+## list would understate the cost of exactly the removals worth thinking
+## hardest about.
+static func _deletion_fallout(id: StringName) -> Array[StringName]:
+	var doomed: Array[StringName] = []
+	var frontier: Array[StringName] = [id]
+	while not frontier.is_empty():
+		var current: StringName = frontier.pop_back()
+		for dependent in _dependents_of(current):
+			if doomed.has(dependent):
+				continue
+			doomed.append(dependent)
+			frontier.append(dependent)
+	# The walk can arrive back where it started, because parse dependencies run
+	# in both directions between some pairs -- AI names a Combat class and
+	# Combat names an AI class. That is worth knowing and is said in the prose;
+	# it is not worth a table row reading "deleting AI also requires deleting
+	# AI".
+	doomed.erase(id)
+	ModuleCatalog.sort_ids(doomed)
+	return doomed
 
 
 # --- Class index ----------------------------------------------------------

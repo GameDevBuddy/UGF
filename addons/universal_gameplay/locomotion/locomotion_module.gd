@@ -30,4 +30,7 @@ func get_manifest() -> ModuleManifest:
 			+ "dependency, and one movement capability per entity."
 		)
 		_manifest.requires = [GameplayNames.MODULE_ENTITY]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_ENTITY,
+		]
 	return _manifest

@@ -27,6 +27,7 @@ func get_manifest() -> ModuleManifest:
 			"Semantic action routing through a context stack, so gameplay asks "
 			+ "for actions rather than for keys."
 		)
+		_manifest.parse_requires = []
 	return _manifest
 
 

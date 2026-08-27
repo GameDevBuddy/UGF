@@ -38,4 +38,11 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_FACTIONS,
 			GameplayNames.MODULE_INTERACTION,
 		]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_ENTITY,
+			GameplayNames.MODULE_FACTIONS,
+			GameplayNames.MODULE_INTERACTION,
+			GameplayNames.MODULE_INVENTORY,
+			GameplayNames.MODULE_ITEMS,
+		]
 	return _manifest

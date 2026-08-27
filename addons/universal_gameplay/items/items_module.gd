@@ -45,4 +45,13 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_STATS,
 			GameplayNames.MODULE_INVENTORY,
 		]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_COMBAT,
+			GameplayNames.MODULE_ENTITY,
+			GameplayNames.MODULE_EQUIPMENT,
+			GameplayNames.MODULE_INTERACTION,
+			GameplayNames.MODULE_INVENTORY,
+			GameplayNames.MODULE_STATS,
+			GameplayNames.MODULE_SURVIVAL,
+		]
 	return _manifest

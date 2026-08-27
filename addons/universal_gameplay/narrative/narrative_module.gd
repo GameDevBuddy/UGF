@@ -27,4 +27,5 @@ func get_manifest() -> ModuleManifest:
 		)
 		_manifest.requires = []
 		_manifest.optional = []
+		_manifest.parse_requires = []
 	return _manifest

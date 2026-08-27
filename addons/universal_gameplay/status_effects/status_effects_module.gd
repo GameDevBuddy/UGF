@@ -32,4 +32,9 @@ func get_manifest() -> ModuleManifest:
 			GameplayNames.MODULE_STATS,
 			GameplayNames.MODULE_HEALTH,
 		]
+		_manifest.parse_requires = [
+			GameplayNames.MODULE_ENTITY,
+			GameplayNames.MODULE_HEALTH,
+			GameplayNames.MODULE_STATS,
+		]
 	return _manifest
