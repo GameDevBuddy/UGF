@@ -13,11 +13,17 @@ extends FrameworkTestCase
 ##
 ## [b]Nothing here is hand-fed.[/b] The test constructs no events, pokes no
 ## private state, and calls no service where a component would have done the
-## calling. That is the whole value of the file: the chain can only run if the
-## seams between the modules -- the adapters, the bus, the field names an
-## objective matches on -- are all genuinely connected. Break one of them and
-## this suite goes red while every module's own suite stays green, which is the
-## failure a slice gate exists to catch.
+## calling. It stands in for exactly one thing, and says so: choosing a line of
+## dialogue is [method DialogueRuntime.advance] and
+## [method DialogueRuntime.choose_id], because that is the seam a conversation
+## window drives and the framework offers no other. Walking, focusing,
+## pressing, taking, tracking and saving all go through the components.
+##
+## That is the whole value of the file: the chain can only run if the seams
+## between the modules -- the adapters, the bus, the field names an objective
+## matches on -- are all genuinely connected. Break one of them and this suite
+## goes red while every module's own suite stays green, which is the failure a
+## slice gate exists to catch.
 ##
 ## The mission is the load-bearing part. Its three objectives name an event and
 ## a few field names and nothing else: no InteractionComponent, no
@@ -144,7 +150,12 @@ func _build_ground() -> StaticBody3D:
 	return add_test_node(ground) as StaticBody3D
 
 
-func _build_player(entity_name: String = "Player") -> CharacterBody3D:
+## [param persistent_id] is a parameter because a second character in the same
+## world needs its own identity: two entities answering to "player" would make
+## the save file's records ambiguous and the mission's subject matchers moot.
+func _build_player(
+	entity_name: String = "Player", persistent_id: StringName = &"player"
+) -> CharacterBody3D:
 	var entity := CharacterBody3D.new()
 	entity.name = entity_name
 
@@ -157,7 +168,7 @@ func _build_player(entity_name: String = "Player") -> CharacterBody3D:
 
 	var identity := PersistentIdentity.new()
 	identity.name = "PersistentIdentity"
-	identity.persistent_id = &"player"
+	identity.persistent_id = persistent_id
 	entity.add_child(identity)
 
 	var state := SemanticState.new()
@@ -231,8 +242,12 @@ func _build_crate() -> Node3D:
 	state.name = "SemanticState"
 	entity.add_child(state)
 
+	# Unlimited charges on purpose. A one-charge node would stop the crate
+	# being offered a second time all by itself, which would make the
+	# interaction's own one-shot rule redundant and leave the focus handoff
+	# below with two possible causes and no way to tell which one fired.
 	var node_definition := SurvivalFixtures.resource_definition(
-		&"node.crate", CRATE_TABLE, &"", 1
+		&"node.crate", CRATE_TABLE, &"", 0
 	)
 	var resource := ResourceNode.new()
 	resource.name = "ResourceNode"
@@ -313,8 +328,9 @@ func _crate_interaction() -> InteractionDefinition:
 	var tags: Array[StringName] = [CONTAINER_TAG]
 	definition.tags = tags
 	definition.action = HarvestAction.new()
-	# A one-shot: once it is searched it stops being offered, which is what
-	# hands focus on to the foreman without the test steering it.
+	# A one-shot, and the only reason the crate stops being offered: the node
+	# behind it never runs out (see _build_crate). That is what hands focus on
+	# to the foreman without the test steering it.
 	definition.repeatable = false
 	return definition
 
@@ -423,6 +439,19 @@ func _press_interact() -> void:
 
 
 ## Runs [param component]'s conversation through to its accepted ending.
+## Points the drive helpers at [param entity] and gives it control. The member
+## variables are what [method _frame] reads, so this is what "the player" means
+## for every walk and press after it.
+func _take_control_of(entity: CharacterBody3D) -> void:
+	player = entity
+	movement = _find(entity, MovementComponent) as MovementComponent
+	interactor = _find(entity, InteractorComponent) as InteractorComponent
+	inventory = _find(entity, InventoryComponent) as InventoryComponent
+	controller = _find(entity, CharacterController) as CharacterController
+	controller.set_router(router)
+	assert_ok(controller.take_control(), "the rebuilt character has the input")
+
+
 func _accept_the_job(component: DialogueComponent) -> void:
 	var runtime := component.get_runtime()
 	if runtime == null:
@@ -443,6 +472,35 @@ func _interaction_of(entity: Node) -> InteractionComponent:
 	return InteractionComponent.find_on(entity)
 
 
+## Reads a bare field name off an event the way an objective's count field is
+## read: through [EventMatcher], which is the framework's only reader.
+func _read_field(field: StringName, event: FrameworkEvent) -> Variant:
+	var reader := EventMatcher.new()
+	reader.field = field
+	return reader.read(event)
+
+
+## The module directory of every framework path named in [param text].
+func _modules_named_in(text: String) -> PackedStringArray:
+	var addon := "res://addons/universal_gameplay/"
+	var named := PackedStringArray()
+	var at := text.find(addon)
+	while at != -1:
+		named.append(text.substr(at + addon.length()).get_slice("/", 0))
+		at = text.find(addon, at + addon.length())
+	return named
+
+
+## Every GDScript file directly under [param directory], sorted.
+func _scripts_in(directory: String) -> PackedStringArray:
+	var found := PackedStringArray()
+	for file_name in DirAccess.get_files_at(directory):
+		if file_name.ends_with(".gd"):
+			found.append(directory.path_join(file_name))
+	found.sort()
+	return found
+
+
 # --- The chain ------------------------------------------------------------
 
 func test_the_adventure_chain_runs_end_to_end() -> void:
@@ -459,7 +517,17 @@ func test_the_adventure_chain_runs_end_to_end() -> void:
 		player.global_position.z < origin.z - 1.0,
 		"and it moved the way forward points, not just somewhere"
 	)
-	assert_true(at_crate <= 1.5, "the walk ended inside the interactor's reach")
+	# Asked of the interactor rather than compared against _walk_to's own stop
+	# distance, which would only restate the loop's exit condition. Reach is
+	# the quantity that decides whether the press below is refused, so reach is
+	# what the walk has to have satisfied.
+	assert_true(
+		interactor.is_in_reach(crate),
+		(
+			"the walk ended inside the interactor's reach: %.2f m away, "
+			+ "with %.2f m of reach"
+		) % [at_crate, interactor.get_reach()]
+	)
 	assert_eq(
 		interactor.get_focus(),
 		_interaction_of(crate),
@@ -509,7 +577,19 @@ func test_the_adventure_chain_runs_end_to_end() -> void:
 
 	# 4. DIALOGUE. Same walk, same button, a different kind of target.
 	var at_foreman := _walk_to(foreman, 1.5)
-	assert_true(at_foreman <= 1.5, "the character walked on to the foreman")
+	assert_true(
+		interactor.is_in_reach(foreman),
+		"the character walked on to within reach of the foreman: %.2f m" % at_foreman
+	)
+	# Focus goes to the nearest available target, and the crate is normally
+	# still the nearer of the two here -- but where the walk comes to rest
+	# varies by half a metre between runs, so the handoff is pinned to
+	# availability itself rather than to that geometry holding. Asked of the
+	# crate with the player as the interactor: the question focus asks.
+	assert_empty(
+		_interaction_of(crate).get_available(player),
+		"the searched crate has nothing left to offer, %.2f m away" % _distance_to(crate)
+	)
 	assert_eq(
 		interactor.get_focus(),
 		_interaction_of(foreman),
@@ -543,6 +623,60 @@ func test_the_adventure_chain_runs_end_to_end() -> void:
 	)
 
 
+## The mission is the player's, and the matchers that say so have to be read
+## rather than assumed.
+##
+## With one actor in the world, [code]interactor[/code], [code]listener[/code]
+## and [code]get_owner_entity[/code] are the player by construction: every
+## IS_SUBJECT matcher in the mission holds no matter what the framework does
+## with it. That is the difference between "a crate was searched" and "you
+## searched a crate", and it is invisible until somebody else is in the room.
+func test_somebody_elses_search_is_not_credited_to_the_player() -> void:
+	assert_ok(missions.start_by_id(MISSION, player))
+
+	# A second searcher, built the same way and standing at the crate. The
+	# player is five metres back and does nothing at all in this test.
+	var stranger := _build_player("Stranger", &"stranger")
+	stranger.global_position = crate.global_position + Vector3(0.6, 0.0, 0.0)
+	var their_hands := _find(stranger, InteractorComponent) as InteractorComponent
+	var their_bag := _find(stranger, InventoryComponent) as InventoryComponent
+	# Ticked rather than told: the stranger finds the crate through the same
+	# interval scan the player's walk relies on.
+	for _settle in 4:
+		their_hands.tick(STEP)
+	assert_eq(
+		their_hands.get_focus(),
+		_interaction_of(crate),
+		"the stranger has the crate in reach and the player does not"
+	)
+	assert_ok(their_hands.interact(), "and searched it through the same pipeline")
+
+	# Same events on the same bus, so the mission is being offered exactly what
+	# it was offered in the chain above -- with a different actor in the fields
+	# its matchers read.
+	assert_eq(their_bag.count(RELIC), 1, "the relic went into the stranger's bag")
+	assert_size(
+		_events_of(GameplayNames.EVENT_INTERACTION_COMPLETED),
+		1,
+		"the bus carried the search"
+	)
+	assert_size(
+		_events_of(GameplayNames.EVENT_ITEM_ACQUIRED), 1, "and the acquisition"
+	)
+
+	var runtime := missions.get_runtime(MISSION)
+	assert_not_null(runtime, "the mission is still in flight")
+	if runtime != null:
+		assert_false(
+			runtime.get_objective(OBJECTIVE_SEARCH).is_complete(),
+			"but somebody else's search does not complete the player's objective"
+		)
+		assert_false(
+			runtime.get_objective(OBJECTIVE_TAKE).is_complete(),
+			"and somebody else's relic is not the player's relic"
+		)
+
+
 # --- Save -----------------------------------------------------------------
 
 func test_the_finished_adventure_survives_a_save() -> void:
@@ -555,7 +689,7 @@ func test_the_finished_adventure_survives_a_save() -> void:
 	# from scratch, and only the file in common. Nothing is carried over by
 	# object identity, which is the only honest way to test a load.
 	var second := _second_world()
-	assert_ok(second.saves.load_slot(&"slot_1"))
+	_load_into(second, &"slot_1")
 
 	assert_true(
 		second.missions.has_completed(MISSION),
@@ -589,7 +723,7 @@ func test_a_mission_still_in_flight_comes_back_able_to_finish() -> void:
 	assert_ok(saves.save(&"slot_midway"))
 
 	var second := _second_world()
-	assert_ok(second.saves.load_slot(&"slot_midway"))
+	_load_into(second, &"slot_midway")
 
 	var runtime := second.missions.get_runtime(MISSION)
 	assert_not_null(runtime, "the mission came back in flight")
@@ -606,9 +740,24 @@ func test_a_mission_still_in_flight_comes_back_able_to_finish() -> void:
 			runtime.get_objective(OBJECTIVE_REPORT).is_complete(), "but no more"
 		)
 
-	# Finish it in the rebuilt world. Only a restored mission can complete here.
-	assert_ok(second.dialogue.talk(second.player))
+	# Finish it in the rebuilt world, and finish it the way the chain does:
+	# walk, focus, press. Starting the conversation by calling the component
+	# would prove the mission was restored while saying nothing about whether
+	# the character came back able to play.
+	var at_foreman := _walk_to(second.foreman, 1.5)
+	assert_true(
+		interactor.is_in_reach(second.foreman),
+		"the rebuilt character walked to the foreman, %.2f m away" % at_foreman
+	)
+	assert_eq(
+		interactor.get_focus(),
+		_interaction_of(second.foreman),
+		"and the rebuilt foreman is what came into focus"
+	)
+	_press_interact()
+	assert_true(second.dialogue.is_talking(), "the press started the conversation")
 	_accept_the_job(second.dialogue)
+	assert_false(second.dialogue.is_talking(), "which ran to its end")
 	assert_true(
 		second.missions.has_completed(MISSION),
 		"the last objective completed the mission the save restored"
@@ -623,35 +772,154 @@ func test_a_mission_still_in_flight_comes_back_able_to_finish() -> void:
 
 func test_the_mission_that_watched_all_this_names_no_module() -> void:
 	# Everything above could be true and the design still wrong, if an
-	# objective had to hold a component to work. It does not: the whole mission
-	# is event names, field names and values.
+	# objective had to hold a component to work. Three things have to hold for
+	# it not to, and none of them is a statement about this test's own fixture:
+	# the field names an objective is written in have to resolve on the events
+	# the other modules really publish, the classes an objective is made of
+	# have to declare nothing that could store one of those modules, and the
+	# module itself has to name them nowhere.
+	_play_the_chain()
+
 	var definition := core.get_definition(MISSION) as MissionDefinition
 	assert_not_null(definition, "the mission is registered content")
+	assert_size(definition.objectives, 3, "holding all three of its objectives")
 	for objective in definition.objectives:
-		assert_ne(objective.event_name, &"", "%s counts a named event" % objective.id)
+		var carriers := _events_of(objective.event_name)
+		assert_size(
+			carriers,
+			1,
+			"%s counts '%s', which the chain published once" % [
+				objective.id, objective.event_name
+			]
+		)
+		if carriers.size() != 1:
+			continue
+		var carrier := carriers[0]
+		if objective.count_field != &"":
+			# A count field is the quietest way for this to go wrong: misspell
+			# it and every occurrence counts as one, which a "collect ten"
+			# objective feels and a "collect one" objective never does.
+			assert_ne(
+				_read_field(objective.count_field, carrier),
+				null,
+				"%s counts by '%s', which %s carries" % [
+					objective.id, objective.count_field, objective.event_name
+				]
+			)
 		for matcher in objective.matchers:
-			assert_ne(matcher.field, &"", "a matcher on %s names a field" % objective.id)
-			assert_false(
-				matcher.value is Object,
-				"a matcher on %s holds a live object rather than a value" % objective.id
+			assert_ne(
+				matcher.read(carrier),
+				null,
+				"a matcher on %s reads '%s', which %s carries" % [
+					objective.id, matcher.field, objective.event_name
+				]
+			)
+			assert_true(
+				matcher.matches(carrier, player),
+				"and it holds on the event as published: %s" % matcher.describe()
 			)
 
-	# And the classes those objectives are made of import none of what this
-	# slice pointed them at.
-	for path in [
-		"res://addons/universal_gameplay/missions/objective_definition.gd",
-		"res://addons/universal_gameplay/missions/event_matcher.gd",
-	]:
+	# Nothing an objective is made of holds an object at all. A Node export is
+	# already impossible here -- GDScript refuses one on a Resource -- but a
+	# Resource from another module is not, and an objective carrying an
+	# ItemDefinition would couple Missions to Items just as firmly as a
+	# preload. The scan below catches the preload; this catches the export.
+	for made_of in [ObjectiveDefinition.new(), EventMatcher.new()]:
+		var owner_name: String = (made_of.get_script() as Script).resource_path.get_file()
+		for property in made_of.get_property_list():
+			if (int(property["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) == 0:
+				continue
+			var described := "%s.%s" % [owner_name, property["name"]]
+			assert_ne(
+				int(property["type"]), TYPE_OBJECT, "%s is typed as an object" % described
+			)
+			if int(property["type"]) != TYPE_ARRAY:
+				continue
+			# An Array[ItemDefinition] would slip past the check above: the
+			# property is an Array, and the type it holds lives in the hint.
+			var element := String(property["hint_string"]).get_slice(":", 1)
+			assert_true(
+				element.is_empty() or element == "EventMatcher",
+				"%s is an array of %s" % [described, element]
+			)
+
+	# And the module those classes live in names none of what this slice
+	# pointed them at. Enumerated rather than listed, because the two files the
+	# objectives are declared in are not where a stray dependency would land --
+	# the runtime and the service are, and a file added tomorrow is not on any
+	# list anybody remembers to update.
+	var module := "res://addons/universal_gameplay/missions/"
+	var scripts := _scripts_in(module)
+	assert_true(
+		scripts.size() >= 10,
+		"the scan found %d scripts in %s, so it is reading a real directory" % [
+			scripts.size(), module
+		]
+	)
+	var coupled := PackedStringArray()
+	for path in scripts:
 		var text := FileAccess.get_file_as_string(path)
 		assert_true(text.length() > 0, "could not read %s" % path)
 		for type_name in [
 			"InteractionComponent", "InventoryComponent", "DialogueComponent",
 			"ResourceNode", "HarvestAction", "TalkAction",
 		]:
-			assert_false(text.contains(type_name), "%s names %s" % [path, type_name])
+			if text.contains(type_name):
+				coupled.append("%s names %s" % [path.get_file(), type_name])
+		# Names are half of it. A preload reaches a module by path, and the
+		# path is dialogue_component.gd -- the words "DialogueComponent" never
+		# appear in it, so the loop above would never see it.
+		for module_name in _modules_named_in(text):
+			assert_eq(
+				module_name,
+				"missions",
+				"%s names a file in the %s module" % [path.get_file(), module_name]
+			)
+
+	# Pinned to the exact list rather than asserted empty, because it is not
+	# empty and pretending otherwise would be the more comfortable lie:
+	# MissionRuntime.get_subject_inventory() reaches for a bag so an item
+	# reward has somewhere to go. That is the paying-out side. Nothing on the
+	# counting side -- what an objective is, what it matches, what advances it
+	# -- names a module at all, and this goes red the day that changes in
+	# either direction.
+	assert_eq(
+		coupled,
+		PackedStringArray(["mission_runtime.gd names InventoryComponent"]),
+		"the missions module reaches out of itself exactly once, to pay a reward"
+	)
 
 
 # --- Helpers used by more than one test -----------------------------------
+
+## Loads [param slot_id] into [param world] and checks what the load reported.
+##
+## [method SaveService.load_slot] returns ok whatever it found -- a record for
+## an entity this world does not have is information rather than an error, so
+## that a removed module cannot make an old save unloadable -- which makes the
+## result a statement about the file being readable and nothing more. The
+## report is where a load either landed or quietly did not: an error means
+## nothing was applied, and a warning means saved state arrived with no
+## component to receive it, which is what a character rebuilt one component
+## short looks like.
+func _load_into(world: SecondWorld, slot_id: StringName) -> void:
+	var result := world.saves.load_slot(slot_id)
+	assert_ok(result, "the slot read back")
+	var issues: ValidationResult = result.payload
+	if issues == null:
+		fail("The load reported nothing at all.")
+		return
+	assert_false(
+		issues.has_errors(), "the load reported no errors: %s" % issues.format_report()
+	)
+	assert_false(
+		issues.has_warnings(),
+		(
+			"and every piece of saved state found a component to land in: %s"
+			% issues.format_report()
+		)
+	)
+
 
 ## The whole chain with no assertions, for the tests whose subject is what
 ## happens afterwards.
@@ -669,17 +937,34 @@ class SecondWorld:
 	var saves: SaveService = null
 	var missions: MissionService = null
 	var narrative: NarrativeStateService = null
-	var player: Node3D = null
+	var player: CharacterBody3D = null
 	var inventory: InventoryComponent = null
+	var foreman: Node3D = null
 	var dialogue: DialogueComponent = null
 
 
 ## Builds a world that shares only the definition registry and the save
 ## backend with the one the chain was played in.
+##
+## The first world is torn down rather than left standing beside it. Two
+## players and two foremen in one tree would leave focus choosing between
+## duplicates at the same coordinates, and the second world's conversation
+## would be heard by the first world's services as well as its own; a load is
+## only honest when nothing survives it by object identity.
 func _second_world() -> SecondWorld:
-	# The first world's mission service stays subscribed to the bus otherwise,
-	# and would react to the second world's conversation as well as its own.
+	# Unsubscribed before the entities go, because the mission service is not
+	# one of them and would otherwise still be listening.
 	missions.set_bus(null)
+	for entity in [player, crate, foreman]:
+		entity.free()
+	player = null
+	crate = null
+	foreman = null
+	movement = null
+	controller = null
+	interactor = null
+	inventory = null
+	dialogue = null
 
 	var world := SecondWorld.new()
 	world.narrative = NarrativeStateService.new()
@@ -688,10 +973,13 @@ func _second_world() -> SecondWorld:
 
 	world.player = _build_player("RebuiltPlayer")
 	world.inventory = _find(world.player, InventoryComponent) as InventoryComponent
+	# The rebuilt character is handed the router, the way a fresh launch hands
+	# it to the character it just spawned. From here the drive helpers move
+	# this one, so the walk-and-press path is the same one the chain uses.
+	_take_control_of(world.player)
 
-	world.dialogue = _find(
-		_build_foreman("RebuiltForeman", world.narrative), DialogueComponent
-	) as DialogueComponent
+	world.foreman = _build_foreman("RebuiltForeman", world.narrative)
+	world.dialogue = _find(world.foreman, DialogueComponent) as DialogueComponent
 
 	world.missions = MissionService.new()
 	world.missions.name = "SecondMissionService"

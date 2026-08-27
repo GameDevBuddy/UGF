@@ -1,6 +1,12 @@
 extends FrameworkTestCase
-## Slice B of the vertical slice gates (Implementation Plan 36): weapon ->
-## damage -> loot -> equip -> XP/reputation -> mission.
+## Slice B of the vertical slice gates (Implementation Plan 36).
+##
+## [b]The shape is a fan-out, not a line.[/b] One trigger pull becomes damage
+## and then a death, and the death is what everything else hangs off:
+## loot -> equip -> a second shot with the looted gun; experience -> level ->
+## mission; and heat -> reputation with two factions. Reading it as a single
+## chain would overstate it, because the damage-to-experience arrow is the one
+## the framework does not own -- see the note on the glue below.
 ##
 ## [b]Every module here already passes its own suite.[/b] What this file asks
 ## is whether they compose: whether one trigger pull, resolved by the real
@@ -383,12 +389,53 @@ func test_the_corpse_rolls_its_table_when_it_dies() -> void:
 
 
 func test_the_same_seed_leaves_the_same_corpse() -> void:
-	# The reproducibility the injected RNG exists for. Rolled directly here
-	# because a corpse refuses to be looted twice.
+	# The reproducibility the injected RNG exists for, asserted on the corpse
+	# rather than on the table. Rolling the table twice by hand would prove
+	# nothing about this slice -- test_loot.gd already owns table determinism,
+	# and it would pass on two empty results. So a second bandit carries the
+	# same table and the same seed, and both of them die of the same gun, which
+	# puts set_rng -> died -> generate on the hook instead of roll().
+	var twin_bag := InventoryComponent.new()
+	twin_bag.name = "InventoryComponent"
+	twin_bag.profile_override = ItemFixtures.container(10)
+
+	var twin_pockets := LootComponent.new()
+	twin_pockets.name = "LootComponent"
+	twin_pockets.table_override = _bandit_table()
+	twin_pockets.container = twin_bag
+
+	var twin := CombatFixtures.dummy("Twin", Vector3.FORWARD * 12.0, 100.0) as Node3D
+	twin.add_child(twin_bag)
+	twin.add_child(twin_pockets)
+	add_test_node(twin)
+	_assemble(twin)
+	twin_pockets.set_rng(_rng(LOOT_SEED))
+
+	_empty_the_sidearm_into_the_bandit()
+	assert_true(pockets.has_rolled(), "the first corpse rolled its table")
+
+	# The fake is re-pointed rather than the corpse moved: the remaining rounds
+	# go into the twin, who is still standing where the first one stood.
+	provider.targets.clear()
+	provider.targets.append(twin)
+	weapon.tick(0.5)
+	assert_ok(combat.attack(), "the third shot is allowed")
+	weapon.tick(0.5)
+	assert_ok(combat.attack(), "the fourth shot is allowed")
+
+	assert_true(twin_pockets.has_rolled(), "and so did the second")
+	assert_false(corpse_bag.is_empty(), "the seeded roll actually dropped something")
 	assert_eq(
-		str(_bandit_table().roll(_rng(LOOT_SEED))),
-		str(_bandit_table().roll(_rng(LOOT_SEED))),
-		"two rolls of the same table on the same seed agree"
+		twin_bag.count(&"item.bandit_carbine"), corpse_bag.count(&"item.bandit_carbine"),
+		"the same seed left the same carbine on both corpses"
+	)
+	assert_eq(
+		twin_bag.count(&"item.scrap"), corpse_bag.count(&"item.scrap"),
+		"and the same scrap"
+	)
+	assert_eq(
+		twin_bag.count(&"item.trophy"), corpse_bag.count(&"item.trophy"),
+		"and passed over the trophy on both"
 	)
 
 
@@ -424,6 +471,29 @@ func test_the_looted_carbine_is_carried_equipped_and_felt() -> void:
 	assert_eq(
 		pack.count(&"item.sidearm"), 1,
 		"the displaced sidearm went back into the pack rather than vanishing"
+	)
+
+	# The id alone would not prove the gun works. WeaponComponent resolves the
+	# id and the WeaponProfile from the slot independently, so a carbine id
+	# sitting on top of a null profile -- a shooter holding nothing -- reads
+	# identically from get_weapon_id(). The magazine and a fired round are the
+	# profile's own numbers, and firing is what puts the loot back into the
+	# pipeline it fell out of.
+	assert_eq(
+		weapon.get_magazine(), 8,
+		"re-armed from the carbine's own AmmoProfile rather than the sidearm's five"
+	)
+
+	var straggler := CombatFixtures.dummy("Straggler", Vector3.FORWARD * 6.0, 100.0) as Node3D
+	add_test_node(straggler)
+	_assemble(straggler)
+	provider.targets.append(straggler)
+
+	assert_ok(combat.attack(), "the looted carbine fires")
+	assert_eq(weapon.get_magazine(), 7, "and spent one of its own rounds")
+	assert_almost_eq(
+		CombatFixtures.health_of(straggler).get_current(), 65.0, 0.001,
+		"the next man down took the carbine's 35, not the sidearm's 60"
 	)
 
 

@@ -18,10 +18,13 @@ extends FrameworkTestCase
 ## check in particular is asserted before as well as after: a guard that was
 ## always going to attack proves nothing about crime.
 ##
-## The one thing the test does itself is move the car. [VehicleControllerAdapter]
-## integrates speed and heading and deliberately applies neither, because moving
-## a body is a body's job — and a slice that needed a physics world would not
-## run headless (rule 33). Everything above that line is the framework's own.
+## Two things here are the test's own. It moves the car, because
+## [VehicleControllerAdapter] integrates speed and heading and deliberately
+## applies neither — moving a body is a body's job, and a slice that needed a
+## physics world would not run headless (rule 33). And it tells the world
+## service where the observer is, because nothing in the framework polls a
+## position to drive streaming; what is under test there is the answer, not the
+## asking. Everything above those two lines is the framework's own.
 
 const BUS_SCRIPT: String = "res://addons/universal_gameplay/core/event_bus.gd"
 const CORE_SCRIPT: String = "res://addons/universal_gameplay/core/framework_core.gd"
@@ -78,7 +81,10 @@ func before_each() -> void:
 	source = FakeInputSource.new()
 	router = InputRouter.new(source)
 	add_test_node(router)
-	router.set_context(InputContexts.on_foot())
+	# The stack is left empty on purpose. Seeding it with an on-foot context
+	# here would pre-satisfy the first assertion of the slice, and what that
+	# assertion is for is that the character's own controller is the thing
+	# which puts a context on the router.
 	core.register_service(GameplayNames.SERVICE_INPUT, router)
 
 	factions = CrimeFixtures.factions()
@@ -149,6 +155,8 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 	var bag := CommerceFixtures.inventory_of(player)
 	var fuel := VehicleFixtures.fuel_of(car)
 	var door := VehicleFixtures.find(car, InteractionComponent) as InteractionComponent
+	var region := VehicleFixtures.find(car, RegionTracker) as RegionTracker
+	var counter := _find(shop, InteractionComponent) as InteractionComponent
 	var brain := (
 		CrimeFixtures.find(constable, AIControllerComponent) as AIControllerComponent
 	)
@@ -157,13 +165,16 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 	).get_provider()
 
 	# --- 1. Enter the vehicle ---------------------------------------------
+	assert_eq(router.get_depth(), 0, "nothing is holding the input stack yet")
 	assert_ok(walker.take_control(), "the player starts the slice on foot")
 	assert_eq(
 		router.get_active_context_id(),
 		GameplayNames.INPUT_CONTEXT_ON_FOOT,
-		"holding the walking input context"
+		"holding the walking input context, which is the context it pushed itself"
 	)
+	assert_eq(router.get_depth(), 1, "one deep, because one controller has control")
 	assert_false(vehicle.is_running(), "beside a parked car with its engine off")
+	assert_eq(region.get_region_id(), SUBURB, "parked in the suburb it is about to leave")
 	assert_false(world.is_active(DOCKS), "and the docks asleep on the far side of town")
 
 	assert_ok(hands.begin(door), "pressing use on the car runs M5's interaction pipeline")
@@ -175,45 +186,91 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 		GameplayNames.INPUT_CONTEXT_VEHICLE_DRIVER,
 		"so the driving context is what input now resolves against"
 	)
+	assert_eq(
+		router.get_depth(),
+		1,
+		"still one deep: the character let go before the vehicle took hold, "
+		+ "so no player is ever two contexts deep in their own car"
+	)
 	assert_true(vehicle.is_running(), "a driver in the seat started the engine")
 
 	# --- 2. Drive ---------------------------------------------------------
 	var full_tank := fuel.get_level()
-	var parked := car.global_position
 	source.press(GameplayNames.ACTION_MOVE_FORWARD)
 	var arrived := false
+	var driven := 0
 	for step in 300:
 		_advance(0.1)
+		driven += 1
 		if car.global_position.distance_to(SHOP_POSITION) <= 8.0:
 			arrived = true
 			break
 	assert_true(
 		arrived, "throttle through the input seam drove the car the 58m to the shop"
 	)
+	var cruising := vehicle.get_speed()
+	assert_almost_eq(
+		cruising,
+		vehicle.get_handling().max_speed,
+		0.001,
+		"at the whole of the throttle the seam handed it rather than a fraction of one"
+	)
+	var throttled := full_tank - fuel.get_level()
+
+	# Coasting first, for two reasons. Drag alone stops this car in three
+	# seconds, so a handbrake measured over a longer window than that proves
+	# nothing about the handbrake; and an engine burning fuel with the throttle
+	# shut is the other half of what the solver does with a throttle.
+	source.release(GameplayNames.ACTION_MOVE_FORWARD)
+	var before_coasting := fuel.get_level()
+	for step in 5:
+		_advance(0.1)
+	var coasting := vehicle.get_speed()
+	var idled := before_coasting - fuel.get_level()
 	assert_true(
-		vehicle.get_speed() > 0.0, "and it is still under power as it comes in"
+		coasting > 0.5, "half a second off the throttle leaves the car still rolling"
 	)
 
-	source.release(GameplayNames.ACTION_MOVE_FORWARD)
 	source.press(GameplayNames.ACTION_JUMP)
-	for step in 100:
+	for step in 5:
 		_advance(0.1)
 		if vehicle.get_speed() <= 0.5:
 			break
 	source.release(GameplayNames.ACTION_JUMP)
 	assert_almost_eq(
-		vehicle.get_speed(), 0.0, 0.5, "the handbrake, on the same seam, stopped it"
-	)
-	assert_true(
-		car.global_position.z - parked.z > 40.0,
-		"the car covered real ground rather than sitting still with the wheels turning"
+		vehicle.get_speed(),
+		0.0,
+		0.5,
+		(
+			"the handbrake, on the same seam, stopped it inside the half second "
+			+ "in which coasting only took it from %.1f to %.1f m/s"
+		) % [cruising, coasting]
 	)
 	assert_true(fuel.get_level() < full_tank, "and the drive cost fuel")
-	assert_false(fuel.is_empty(), "though not the whole tank")
+	assert_true(idled > 0.0, "an engine left running burns fuel with the throttle shut")
+	assert_true(
+		throttled / float(driven) > (idled / 5.0) * 2.0,
+		(
+			"burned by the throttle rather than by the clock: %.3f a step under "
+			+ "power against %.3f a step idling"
+		) % [throttled / float(driven), idled / 5.0]
+	)
 
+	# Streaming is the project's job: nothing in the framework polls positions,
+	# so the test is the observer here. What is under test is the world service
+	# answering a distance question about where the drive ended -- and, through
+	# the tracker, the car reporting its own region, which is the framework's
+	# own way round.
 	world.refresh_activation(car.global_position)
 	assert_true(world.is_active(DOCKS), "the drive woke the region it arrived in")
 	assert_false(world.is_active(SUBURB), "and put the one it left to sleep")
+	assert_true(region.refresh(), "the car, asked where it is, finds it has moved")
+	assert_eq(
+		region.get_region_id(),
+		DOCKS,
+		"the car covered real ground rather than sitting still with the wheels "
+		+ "turning: it reports the docks now and reported the suburb when parked"
+	)
 
 	# --- 3. Vendor --------------------------------------------------------
 	assert_ok(hands.begin(door), "pressing use again gets back out")
@@ -224,12 +281,21 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 		GameplayNames.INPUT_CONTEXT_ON_FOOT,
 		"and the stack is where it was before the journey"
 	)
-	assert_true(
-		player.global_position.distance_to(SHOP_POSITION) < 12.0,
-		"the player got out at the shop, which is where the driving took them"
-	)
+	assert_eq(router.get_depth(), 1, "one deep again, not a context left behind")
 
 	var vendor := CommerceFixtures.vendor_of(shop)
+	# The car is stopped at the kerb and the seat put the player out beside it,
+	# a couple of metres from the counter and inside the reach an interactor
+	# ships with. Standing where the slice started they are 58 metres short of
+	# it, and this is the line that says so.
+	assert_ok(
+		hands.begin(counter),
+		"the shop is close enough to press use on, which is the whole of why "
+		+ "the drive had to happen: M5 refuses a target out of reach"
+	)
+	assert_true(vendor.is_open(), "and TradeAction opened it for whoever walked up")
+	assert_eq(vendor.get_customer(), player, "the player being the one who did")
+
 	var quoted := commerce.quote(player, shop, REPAIR_KIT)
 	assert_ok(quoted, "the shop quotes a price for what is on its shelf")
 	var bill := (quoted.payload as TradeContext).total
@@ -314,9 +380,15 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 		brain.get_hostility_provider().is_hostile(constable, player),
 		"so the brain's provider — the only thing AI ever asks — now answers enemy"
 	)
-	assert_false(
-		brain.get_hostility_provider().is_ally(constable, player),
-		"and will not cover for a wanted man"
+	# Read as a number rather than as a yes: is_hostile saturates at true, so it
+	# cannot show whether the law hook is adding to the politics underneath it
+	# or has replaced them. A hostile standing is worth 1.5 and the warrant adds
+	# the adapter's bonus on top, and only both halves working reads 2.5.
+	assert_almost_eq(
+		brain.get_hostility_provider().get_threat_scale(constable, player),
+		AttitudeSolver.threat_scale(AttitudeSolver.Attitude.HOSTILE) + 1.0,
+		0.001,
+		"reading the player as a hostile the law also wants, rather than as one or the other"
 	)
 
 	# --- 6. Save ----------------------------------------------------------
@@ -331,6 +403,10 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 	world.set_active(DOCKS, false)
 	world.set_active(SUBURB, true)
 	assert_false(heat.is_wanted(PLAYER_ID, POLICE), "the session is genuinely wiped")
+	assert_false(
+		politics.is_hostile(constable, player),
+		"the constable's politics along with it"
+	)
 	assert_false(
 		brain.get_hostility_provider().is_hostile(constable, player),
 		"and the constable has forgotten the player entirely"
@@ -351,6 +427,10 @@ func test_the_sandbox_loop_holds_from_the_car_door_to_the_save() -> void:
 	)
 	assert_true(world.is_active(DOCKS), "the world came back awake where the drive left it")
 	assert_false(world.is_active(SUBURB), "and asleep where it did not")
+	assert_true(
+		politics.is_hostile(constable, player),
+		"the restored reputation is hostile again through the seam AI reads it by"
+	)
 	assert_true(
 		brain.get_hostility_provider().is_hostile(constable, player),
 		"and the constable, reading the restored services, still wants the player"
@@ -414,6 +494,14 @@ func _build_world() -> void:
 	car.position = Vector3(0.0, 0.0, 2.0)
 	add_test_node(car)
 	VehicleFixtures.interactable(car, [_enter_interaction()])
+	# The car reports its own region rather than the world scanning for it,
+	# which is the framework's way round and the only component standing on
+	# this slice's streaming path.
+	var tracker := RegionTracker.new()
+	tracker.name = "RegionTracker"
+	tracker.world = world
+	tracker.auto_tick = false
+	car.add_child(tracker)
 	VehicleFixtures.assemble(car, core)
 	vehicle = VehicleFixtures.vehicle_of(car)
 	seats = VehicleFixtures.seats_of(car)
@@ -429,6 +517,12 @@ func _build_world() -> void:
 		500.0
 	)
 	shop.position = SHOP_POSITION
+	var counter := InteractionComponent.new()
+	counter.name = "InteractionComponent"
+	var offers: Array[InteractionDefinition] = [_trade_interaction()]
+	counter.interactions_override = offers
+	counter.auto_tick = false
+	shop.add_child(counter)
 	add_test_node(shop)
 	CommerceFixtures.assemble(shop, core)
 
@@ -548,6 +642,22 @@ func _enter_interaction() -> InteractionDefinition:
 	action.toggles = true
 	action.move_occupant = true
 	interaction.action = action
+	return interaction
+
+
+## Trading, through the same pipeline the car door is opened with.
+##
+## [TradeAction] is the framework's own route from an interactor to
+## [CommerceService], and going straight to the service instead would leave the
+## purchase reachable from anywhere on the map -- nothing in
+## [method CommerceService.validate] asks where the customer is standing.
+func _trade_interaction() -> InteractionDefinition:
+	var interaction := InteractionDefinition.new()
+	interaction.id = &"interaction.trade"
+	interaction.display_name = "Trade"
+	interaction.verb = GameplayNames.VERB_TALK
+	interaction.prompt = "Trade"
+	interaction.action = TradeAction.new()
 	return interaction
 
 

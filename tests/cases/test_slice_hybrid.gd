@@ -17,9 +17,13 @@ extends FrameworkTestCase
 ## checkable by running the code: an undeclared reference compiles and works
 ## perfectly in this repository, where every module is on disk, and only breaks
 ## for the project that installed half of them. So the check is structural.
-## Scan each module folder for the class names it mentions, look up which
-## folder declares each of those names, and require the manifest to admit the
-## relationship. Core is excluded, because every module may know Core.
+## Scan each module folder for the class names it mentions and for the addon
+## paths it loads, look up which folder owns each, and require the manifest to
+## admit the relationship. Both halves are needed: a scene composes an entity
+## out of scripts named by [code]res://[/code] path and never spells a class,
+## and a project that installed Character without Combat gets a broken
+## [code]character.tscn[/code] rather than a compile error. Core is excluded,
+## because every module may know Core.
 ##
 ## [b]Does one entity survive carrying all of it?[/b] Twelve modules' worth of
 ## components on one [Node3D], exercised against each other and then round
@@ -42,10 +46,24 @@ var saves: SaveService = null
 var _folders: Dictionary = {}
 var _classes: Dictionary = {}
 var _patterns: Dictionary = {}
+var _path_pattern: RegEx = null
 
 
 func before_each() -> void:
 	core = make_autoload(CORE_SCRIPT, "FrameworkCore")
+
+	# Bootstrapped, not merely constructed. make_autoload only puts the script
+	# in the tree, so without this line the hybrid entity below is assembled
+	# against a core reporting has_feature() == false for every module Part 1
+	# just proved comes up -- and the two halves of this slice would be two
+	# unrelated tests sharing a file rather than one chain.
+	var installed: ValidationResult = core.bootstrap(_everything())
+	assert_false(
+		installed.has_errors(),
+		"The core the hybrid entity is built against must come up clean: %s"
+		% installed.format_report()
+	)
+
 	bus = make_autoload(BUS_SCRIPT, "EventBus")
 	bus.warn_on_unregistered = false
 
@@ -83,18 +101,65 @@ func test_every_module_the_addon_ships_comes_up_in_one_core() -> void:
 
 
 func test_every_requirement_of_every_registered_module_is_also_registered() -> void:
-	# The runtime half of the manifest claim. Ordering is checked elsewhere;
-	# this asserts the stronger property that the graph actually closed -- no
-	# module is running with a requirement that never made it in.
-	var installed := make_autoload(CORE_SCRIPT, "HybridClosureCore")
-	installed.bootstrap(_everything())
+	# The runtime half of the manifest claim, asked against a graph that can
+	# actually be open. Enabling everything makes closure a tautology:
+	# resolve_order refuses any list with a requirement outside it, so a core
+	# that bootstrapped at all has a closed graph by construction and the
+	# question answers itself.
+	#
+	# Gathering alone is the case worth asking about. It requires Items,
+	# Inventory and Loot, none of them enabled, and two of those need Entity
+	# behind them -- so the repair the bootstrapper names has to be transitive
+	# or the second installation below does not come up.
+	var requested: Array[StringName] = [&"module.gathering"]
 
+	var refused := make_autoload(CORE_SCRIPT, "HybridPartialCore")
+	var refusal: ValidationResult = refused.bootstrap(_only(requested))
+
+	assert_true(
+		refusal.has_errors(),
+		"A module list with a requirement left out must be refused, not repaired quietly"
+	)
+	assert_empty(
+		refused.get_module_ids(),
+		"An unresolvable list must register nothing rather than half of itself"
+	)
+	assert_false(
+		refused.has_feature(&"module.gathering"),
+		"Gathering came up without the modules it requires"
+	)
+
+	var implied := ModuleCatalog.get_implied_requirements(requested)
+
+	assert_has(implied, &"module.loot", "Loot is a direct requirement of Gathering")
+	assert_has(
+		implied,
+		&"module.entity",
+		"Entity is required through Items and Inventory, so the closure has to be transitive"
+	)
+
+	var closed: Array[StringName] = requested.duplicate()
+	closed.append_array(implied)
+	var installed := make_autoload(CORE_SCRIPT, "HybridClosureCore")
+	var result: ValidationResult = installed.bootstrap(_only(closed))
+
+	assert_false(
+		result.has_errors(),
+		"Enabling exactly the modules the bootstrapper named must resolve: %s"
+		% result.format_report()
+	)
+	assert_size(
+		installed.get_module_ids(),
+		closed.size(),
+		"The bootstrapper registered something nobody asked for"
+	)
+	for id in closed:
+		assert_true(installed.has_feature(id), "%s was asked for and did not register" % id)
+
+	# And with that set installed, the closure claim is a real question: every
+	# requirement of everything running is itself running.
 	for id in installed.get_module_ids():
-		var module: FrameworkModule = installed.get_module(id)
-		assert_not_null(module, "%s registered but cannot be fetched back" % id)
-		var manifest := module.get_manifest()
-		assert_eq(manifest.id, id, "%s registered under a different id than it declares" % id)
-		for required in manifest.requires:
+		for required in ModuleCatalog.get_manifest(id).requires:
 			assert_true(
 				installed.has_feature(required),
 				"%s is running without %s, which it requires" % [id, required]
@@ -120,10 +185,64 @@ func test_two_cores_hold_the_whole_catalog_at_the_same_time() -> void:
 	)
 	for id in ModuleCatalog.get_ids():
 		assert_true(second.has_feature(id), "%s is missing from the second core" % id)
-		assert_true(
-			first.get_module(id) != second.get_module(id),
-			"%s handed the same module instance to both cores" % id
-		)
+
+	# Input is the probe. Distinct module instances prove nothing about shared
+	# state -- ModuleCatalog.instantiate news one per call, so two cores hold
+	# different objects as arithmetic rather than as a discovered property, and
+	# a module could keep everything in a static and still hand back two. What
+	# tells the two apart is a module that actually owns something, and Input is
+	# the only one in the catalog that does: initialize() builds an InputRouter,
+	# parents it to the core it was handed, and registers it as that core's
+	# service.
+	var first_router := first.get_service(GameplayNames.SERVICE_INPUT) as InputRouter
+	var second_router := second.get_service(GameplayNames.SERVICE_INPUT) as InputRouter
+
+	assert_not_null(first_router, "The first core registered no input router to be isolated")
+	assert_not_null(second_router, "The second core got no input router of its own")
+	assert_true(first_router != second_router, "One router was handed to both cores")
+
+	# State pushed on one core, invisible from the other. A router living in a
+	# static or an autoload answers this question with the other world's stack.
+	var driving := InputContext.new()
+	driving.id = &"input.driving"
+	driving.actions = [GameplayNames.ACTION_MOVE_FORWARD]
+	assert_ok(first_router.push_context(driving))
+
+	assert_eq(first_router.get_depth(), 1, "The first core's router did not take the context")
+	assert_eq(
+		second_router.get_depth(), 0, "The second core's router saw the first core's context"
+	)
+	assert_false(
+		second_router.is_action_allowed(GameplayNames.ACTION_MOVE_FORWARD),
+		"The second core answers input questions out of the first core's stack"
+	)
+
+	# The same failure from the other end: one world shutting down must not
+	# release anything the other is still using.
+	first.shutdown()
+
+	assert_false(
+		first.has_service(GameplayNames.SERVICE_INPUT),
+		"The first core kept its input service through shutdown"
+	)
+	assert_true(
+		second.has_service(GameplayNames.SERVICE_INPUT),
+		"Shutting the first core down took the second core's input service with it"
+	)
+	assert_true(
+		is_instance_valid(second_router),
+		"Shutting the first core down freed the second core's router"
+	)
+	assert_eq(
+		second.get_service(GameplayNames.SERVICE_INPUT),
+		second_router,
+		"The second core's input service is no longer the router it was given"
+	)
+	assert_size(
+		second.get_module_ids(),
+		ModuleCatalog.get_ids().size(),
+		"Shutting the first core down unregistered the second core's modules"
+	)
 
 
 func test_the_whole_catalog_comes_down_and_goes_back_up() -> void:
@@ -154,12 +273,13 @@ func test_the_whole_catalog_comes_down_and_goes_back_up() -> void:
 # --- Part 2: no undeclared sibling dependencies --------------------------
 
 func test_no_module_reaches_into_a_sibling_it_never_declared() -> void:
-	# The gate. Every class name a module's sources mention, that another
-	# module declares, has to appear in this module's manifest as required or
-	# optional. An undeclared one is a hidden import (rule 9) and a dependency
-	# nobody wrote down (rule 36) -- and it is invisible here, where the whole
-	# addon is on disk, because it only breaks in a project that installed the
-	# one module and not the other.
+	# The gate. Every class name a module's sources mention that another module
+	# declares, and every addon file a module's sources load by path, has to
+	# appear in this module's manifest as required or optional. An undeclared
+	# one is a hidden import (rule 9) and a dependency nobody wrote down
+	# (rule 36) -- and it is invisible here, where the whole addon is on disk,
+	# because it only breaks in a project that installed the one module and not
+	# the other.
 	var offenders := _undeclared_sibling_references()
 	assert_empty(
 		offenders,
@@ -209,6 +329,20 @@ func test_the_scan_behind_that_check_actually_read_the_addon() -> void:
 			% folder
 		)
 
+	# And the same for the path half, which reads different files and would
+	# otherwise be able to find nothing while looking busy.
+	var character := "%s/character/character.tscn" % ADDON_ROOT
+	assert_has(
+		_files(ADDON_ROOT, "tscn"),
+		character,
+		"character.tscn composes across more modules than anything else in the addon"
+	)
+	assert_has(
+		_referenced_folders(FileAccess.get_file_as_string(character)),
+		"combat",
+		"character.tscn attaches the combat module's scripts by path, and the scan must see it"
+	)
+
 
 func test_core_and_the_shared_folders_are_outside_the_check() -> void:
 	# Core is excluded on purpose: every module may know Core. So are the
@@ -245,6 +379,40 @@ func test_the_check_names_a_reference_that_is_not_declared() -> void:
 		offenders[0].contains("module.commerce"),
 		"The report names the module that owns it: %s" % offenders[0]
 	)
+
+
+func test_the_check_names_a_scene_that_attaches_an_undeclared_module_script() -> void:
+	# The half a class-name scan cannot see. Nothing in this line spells
+	# WalletComponent, and the path it does spell lives inside a string literal,
+	# so both of the earlier filters would throw it away -- but a project that
+	# enabled Missions without Commerce still gets a scene it cannot open.
+	var scene := (
+		'[ext_resource type="Script" path="%s/commerce/wallet_component.gd" id="1_wallet"]'
+		% ADDON_ROOT
+	)
+	var offenders := _undeclared_references_in("missions", scene + "\n")
+
+	assert_size(offenders, 1, "One undeclared path reference should produce one report")
+	assert_true(
+		offenders[0].contains("commerce"), "The report names the folder: %s" % offenders[0]
+	)
+	assert_true(
+		offenders[0].contains("module.commerce"),
+		"The report names the module that owns it: %s" % offenders[0]
+	)
+
+
+func test_a_scene_loading_core_or_its_own_folder_is_not_a_violation() -> void:
+	# Core is outside the check for scenes exactly as it is for source, and a
+	# module attaching its own scripts is what a module's scene is made of.
+	var scene := (
+		'[ext_resource path="%s/core/framework_core.gd" id="1_core"]' % ADDON_ROOT
+		+ "\n"
+		+ '[ext_resource path="%s/missions/area_trigger.gd" id="2_area"]' % ADDON_ROOT
+	)
+	var offenders := _undeclared_references_in("missions", scene + "\n")
+
+	assert_empty(offenders, "Every module may know Core and its own folder")
 
 
 func test_a_comment_naming_a_sibling_class_is_not_a_reference() -> void:
@@ -296,16 +464,37 @@ func test_one_entity_carries_every_capability_at_once() -> void:
 		17,
 		"The hybrid character carries seventeen capability types drawn from twelve modules"
 	)
-	for type in [
-		PersistentIdentity, SemanticState, StatsComponent, HealthComponent,
-		DamageReceiverComponent, HealthEventAdapter, StatusEffectComponent,
-		InventoryComponent, InventoryEventAdapter, EquipmentComponent, NeedsComponent,
-		ConsumerComponent, InteractorComponent, WalletComponent, FactionComponent,
-		WeaponComponent, CombatComponent,
-	]:
-		assert_not_null(
-			_find(polymath, type), "A capability failed to initialise on the hybrid character"
+	# The chain link between this half of the slice and the last one. These
+	# components were initialised against the core before_each bootstrapped, so
+	# the hybrid is carrying twelve modules' worth of capability on a core where
+	# every module is actually running -- the state Part 1 establishes, and the
+	# state EntityContext.has_feature exists to let a component branch on.
+	var context := _stats(polymath).get_context()
+	assert_not_null(context, "Stats was never handed a context")
+	for id in ModuleCatalog.get_ids():
+		assert_true(
+			context.has_feature(id),
+			"The hybrid was assembled against a core with no %s registered" % id
 		)
+
+	# Seventeen capabilities, and for each of them something initialisation
+	# produced. Asserting the components are still children would only re-read
+	# the fixture that added them twenty lines ago; every assertion below reads
+	# state that exists because initialize() ran, and most of them name a
+	# sibling that initialize() resolved -- which is the actual claim, that the
+	# twelve modules are wired to each other rather than parked on one node.
+	var state := _find(polymath, SemanticState) as SemanticState
+	var receiver := _receiver(polymath)
+	var effects := _effects(polymath)
+	var inventory := _inventory(polymath)
+	var equipment := _equipment(polymath)
+
+	assert_ok(
+		saves.register_entity(polymath),
+		"Entity: Save found no persistent identity to file this character under"
+	)
+	assert_not_null(state, "Entity: the shared state vocabulary is missing")
+
 	assert_almost_eq(
 		_stats(polymath).get_value(&"stat.power"),
 		10.0,
@@ -313,7 +502,83 @@ func test_one_entity_carries_every_capability_at_once() -> void:
 		"Stats came up on its profile with every other module beside it"
 	)
 	assert_almost_eq(
-		_health(polymath).get_maximum(), 100.0, 0.001, "Health came up at its exported maximum"
+		_health(polymath).get_current(),
+		100.0,
+		0.001,
+		"Health did not fill itself from its maximum, so its initialise never ran"
+	)
+	assert_true(
+		polymath.is_in_group(GameplayNames.GROUP_DAMAGEABLE),
+		"Health did not advertise the entity as damageable"
+	)
+	assert_eq(receiver.health, _health(polymath), "Damage: the receiver found no health to spend")
+	assert_eq(
+		(_find(polymath, HealthEventAdapter) as HealthEventAdapter).health,
+		_health(polymath),
+		"Health adapter: nothing to promote to the bus"
+	)
+	assert_eq(effects.stats, _stats(polymath), "Status effects: no Stats to write modifiers into")
+	assert_eq(effects.damage_receiver, receiver, "Status effects: no receiver for damage effects")
+	assert_eq(effects.semantic_state, state, "Status effects: no state to tag the entity with")
+
+	assert_eq(inventory.get_free_slots(), 20, "Inventory: the container profile never resolved")
+	assert_eq(
+		(_find(polymath, InventoryEventAdapter) as InventoryEventAdapter).inventory,
+		inventory,
+		"Inventory adapter: no bag to publish acquisitions from"
+	)
+	assert_has(
+		equipment.get_slot_ids(),
+		&"slot.main_hand",
+		"Equipment: the loadout never resolved, so there is nowhere to put a sword"
+	)
+	assert_eq(equipment.stats, _stats(polymath), "Equipment: nowhere to apply an item's modifier")
+	assert_eq(equipment.inventory, inventory, "Equipment: no bag to take the item out of")
+
+	assert_has(
+		_needs(polymath).get_need_ids(), &"need.hunger", "Survival: no need definitions resolved"
+	)
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"),
+		100.0,
+		0.001,
+		"Survival: needs were never seeded to their starting values"
+	)
+	assert_eq(_consumer(polymath).needs, _needs(polymath), "Survival: the consumer feeds nothing")
+	assert_eq(_consumer(polymath).inventory, inventory, "Survival: the consumer eats out of no bag")
+
+	assert_not_null(
+		_interactor(polymath).get_profile(), "Interaction: the interactor profile never resolved"
+	)
+	assert_eq(_interactor(polymath).semantic_state, state, "Interaction: no state to tag")
+
+	assert_almost_eq(
+		_wallet(polymath).get_balance(&"currency.gold"),
+		120.0,
+		0.001,
+		"Commerce: the purse was never seeded from its starting amounts"
+	)
+	assert_eq(
+		_faction(polymath).get_faction(),
+		&"faction.watch",
+		"Factions: the allegiance override never resolved"
+	)
+	assert_eq(_faction(polymath).service, factions, "Factions: no service to ask about standing")
+
+	var weapon := _find(polymath, WeaponComponent) as WeaponComponent
+	assert_eq(weapon.equipment, equipment, "Combat: the weapon watches no equipment slot")
+	assert_eq(weapon.semantic_state, state, "Combat: the weapon tags no state")
+	assert_not_null(_combat(polymath).get_profile(), "Combat: the combat profile never resolved")
+	assert_eq(_combat(polymath).semantic_state, state, "Combat: the swing tags no state")
+
+	# The maximum comes from Stats, not from the export. maximum_health is left
+	# at a value nothing should ever read, so this number is only reachable
+	# through stat.health.max -- a cross-module read rather than a getter.
+	assert_almost_eq(
+		_health(polymath).get_maximum(),
+		100.0,
+		0.001,
+		"Health read its own export instead of the maximum Stats supplies"
 	)
 
 
@@ -580,7 +845,14 @@ func test_every_capability_on_the_hybrid_entity_survives_a_save() -> void:
 
 	assert_ok(saves.save(&"slot_hybrid"))
 
-	# Wipe it exactly as quitting the game would.
+	# Wipe it exactly as quitting the game would, and check every wipe took.
+	#
+	# An unasserted wipe makes the post-load assertion below conditional: if
+	# refill_all() were a no-op, hunger would still read 26 from before the save
+	# and the restore assertion would pass without load_slot having touched
+	# needs at all. refill_all() and clear_states() are both loops over a
+	# getter, so a getter returning nothing makes them silently do nothing --
+	# which is exactly the shape of bug that would hide here.
 	_equipment(polymath).unequip_all()
 	_inventory(polymath).clear()
 	_health(polymath).set_current(100.0)
@@ -591,7 +863,34 @@ func test_every_capability_on_the_hybrid_entity_survives_a_save() -> void:
 	_state(polymath).clear_states()
 	_faction(polymath).set_faction(&"faction.watch")
 	polymath.global_position = Vector3.ZERO
-	assert_true(_inventory(polymath).is_empty(), "The world is genuinely wiped")
+
+	assert_null(
+		_equipment(polymath).get_equipped(&"slot.main_hand"), "The wipe: the sword came off"
+	)
+	assert_true(_inventory(polymath).is_empty(), "The wipe: the bag is empty")
+	assert_almost_eq(
+		_health(polymath).get_current(), 100.0, 0.001, "The wipe: health is back to full"
+	)
+	assert_almost_eq(
+		_needs(polymath).get_value(&"need.hunger"), 100.0, 0.001, "The wipe: hunger is refilled"
+	)
+	assert_almost_eq(
+		_stats(polymath).get_value(&"stat.power"),
+		10.0,
+		0.001,
+		"The wipe: power is back to its base with no modifier left on it"
+	)
+	assert_false(_effects(polymath).has_effect(&"effect.rage"), "The wipe: the buff is gone")
+	assert_almost_eq(
+		_wallet(polymath).get_balance(&"currency.gold"), 0.0, 0.001, "The wipe: the purse is empty"
+	)
+	assert_false(
+		_state(polymath).has_state(&"state.exhausted"), "The wipe: the state tag is cleared"
+	)
+	assert_eq(
+		_faction(polymath).get_faction(), &"faction.watch", "The wipe: back to the starting faction"
+	)
+	assert_almost_eq(polymath.global_position.x, 0.0, 0.001, "The wipe: back at the origin")
 
 	assert_ok(saves.load_slot(&"slot_hybrid"))
 
@@ -671,6 +970,16 @@ func _everything() -> FrameworkSettings:
 	return settings
 
 
+## Settings enabling exactly [param ids] and nothing else.
+func _only(ids: Array[StringName]) -> FrameworkSettings:
+	var settings := FrameworkSettings.new()
+	for id in ids:
+		settings.set_module_enabled(id, true)
+	settings.scan_definitions_on_bootstrap = false
+	settings.validate_on_bootstrap = false
+	return settings
+
+
 ## One character carrying capabilities from twelve modules, initialised and in
 ## the tree.
 ##
@@ -694,13 +1003,18 @@ func _polymath(person_name: String = "Polymath") -> Node3D:
 	# Stats, Health and Status Effects.
 	var stats := StatsComponent.new()
 	stats.name = "StatsComponent"
-	stats.profile_override = ItemFixtures.stats_profile(10.0)
+	stats.profile_override = _stats_profile(10.0, 100.0)
 	stats.auto_tick = false
 	entity.add_child(stats)
 
 	var health := HealthComponent.new()
 	health.name = "HealthComponent"
-	health.maximum_health = 100.0
+	# Health takes its maximum from Stats, which is what a real character
+	# definition produces. The export is left at a value nothing should ever
+	# read, so a test asserting the maximum is asserting the cross-module link
+	# rather than reading back the number the fixture just set.
+	health.maximum_health = 1.0
+	health.stats = stats
 	entity.add_child(health)
 
 	var receiver := DamageReceiverComponent.new()
@@ -778,6 +1092,23 @@ func _polymath(person_name: String = "Polymath") -> Node3D:
 	for component in DefinitionBinder.collect_components(entity):
 		component.initialize(context)
 	return entity
+
+
+## The power stat every other module's modifiers land on, plus the maximum
+## health stat [HealthComponent] reads.
+##
+## [ItemFixtures.stats_profile] carries power alone, which leaves Health and
+## Stats unconnected -- and two components on one entity that never speak to
+## each other are not the composition this slice claims to be exercising.
+func _stats_profile(power: float, maximum_health: float) -> StatsProfile:
+	var profile := ItemFixtures.stats_profile(power)
+	var health_maximum := StatDefinition.new()
+	health_maximum.id = &"stat.health.max"
+	health_maximum.display_name = "Maximum Health"
+	health_maximum.default_base = maximum_health
+	health_maximum.minimum = 0.0
+	profile.stats.append(health_maximum)
+	return profile
 
 
 ## A buff, so two modules are writing modifiers into one Stats component.
@@ -889,7 +1220,7 @@ func _class_folders() -> Dictionary:
 	if not _classes.is_empty():
 		return _classes
 	var modules := _module_folders()
-	for path in _scripts(ADDON_ROOT):
+	for path in _files(ADDON_ROOT, "gd"):
 		var folder := _folder_of(path)
 		if not modules.has(folder):
 			continue
@@ -899,12 +1230,12 @@ func _class_folders() -> Dictionary:
 	return _classes
 
 
-## Every reference from a module's source to a sibling module's class that the
+## Every reference from a module's sources to a sibling module that the
 ## referring module's manifest does not declare.
 func _undeclared_sibling_references() -> Array[String]:
 	var modules := _module_folders()
 	var offenders: Array[String] = []
-	for path in _scripts(ADDON_ROOT):
+	for path in _sources():
 		var folder := _folder_of(path)
 		if not modules.has(folder):
 			continue
@@ -916,6 +1247,12 @@ func _undeclared_sibling_references() -> Array[String]:
 
 ## The same check applied to one piece of source attributed to one module
 ## folder. Separated out so the check itself can be tested.
+##
+## Two scans, because a module can reach a sibling two ways. A class name in
+## GDScript is the obvious one. A [code]res://[/code] path is the other, and it
+## is the one a scene uses for every script it attaches -- so the path scan is
+## what stops a [code].tscn[/code] composing an entity out of five modules
+## without the manifest saying a word.
 func _undeclared_references_in(folder: String, source: String) -> Array[String]:
 	var modules := _module_folders()
 	var classes := _class_folders()
@@ -938,8 +1275,38 @@ func _undeclared_references_in(folder: String, source: String) -> Array[String]:
 				% [declared_class, dependency, modules.get(folder, &"?")]
 			)
 		)
+	for referenced in _referenced_folders(source):
+		if referenced == folder or not modules.has(referenced):
+			continue
+		var dependency: StringName = modules[referenced]
+		if declared.has(dependency):
+			continue
+		offenders.append(
+			(
+				"loads a file out of %s/, which is %s, and %s declares no such dependency"
+				% [referenced, dependency, modules.get(folder, &"?")]
+			)
+		)
 	offenders.sort()
 	return offenders
+
+
+## Addon folders [param source] names by path, in the order first seen.
+##
+## Read from the raw source rather than from [method _strip]'s output, because
+## every one of these paths lives inside a string literal and stripping them is
+## exactly what hid this half of the problem. Whole-line comments still go: a
+## doc comment quoting a path is a cross-reference like any other.
+func _referenced_folders(source: String) -> Array[String]:
+	if _path_pattern == null:
+		# Nothing in ADDON_ROOT is a regex metacharacter, so it goes in as-is.
+		_path_pattern = RegEx.create_from_string("%s/([a-z_0-9]+)/" % ADDON_ROOT)
+	var found: Array[String] = []
+	for hit in _path_pattern.search_all(_uncommented(source)):
+		var folder := hit.get_string(1)
+		if not found.has(folder):
+			found.append(folder)
+	return found
 
 
 ## Requirements and optional dependencies together: rule 36 asks for the
@@ -993,10 +1360,21 @@ func _readable(path: String) -> String:
 func _strip(source: String) -> String:
 	var quoted := RegEx.create_from_string('"[^"\\n]*"')
 	var kept: Array[String] = []
+	for line in _uncommented(source).split("\n"):
+		kept.append(quoted.sub(line, " ", true))
+	return "\n".join(kept)
+
+
+## Source with whole-line comments removed and string literals left alone.
+##
+## What the path scan reads. The class scan needs both gone; the path scan
+## needs the literals kept, because a path is only ever written inside one.
+func _uncommented(source: String) -> String:
+	var kept: Array[String] = []
 	for line in source.split("\n"):
 		if line.strip_edges().begins_with("#"):
 			continue
-		kept.append(quoted.sub(line, " ", true))
+		kept.append(line)
 	return "\n".join(kept)
 
 
@@ -1004,7 +1382,17 @@ func _folder_of(path: String) -> String:
 	return path.trim_prefix(ADDON_ROOT + "/").get_slice("/", 0)
 
 
-func _scripts(directory: String) -> Array[String]:
+## Every file the gate reads. GDScript carries the class-name references;
+## scenes and resources carry the paths, and are where a module composes an
+## entity out of siblings without naming one of them.
+func _sources() -> Array[String]:
+	var found: Array[String] = _files(ADDON_ROOT, "gd")
+	found.append_array(_files(ADDON_ROOT, "tscn"))
+	found.append_array(_files(ADDON_ROOT, "tres"))
+	return found
+
+
+func _files(directory: String, extension: String) -> Array[String]:
 	var found: Array[String] = []
 	var handle := DirAccess.open(directory)
 	if handle == null:
@@ -1015,8 +1403,8 @@ func _scripts(directory: String) -> Array[String]:
 		if not entry.begins_with("."):
 			var path := directory.path_join(entry)
 			if handle.current_is_dir():
-				found.append_array(_scripts(path))
-			elif entry.get_extension() == "gd":
+				found.append_array(_files(path, extension))
+			elif entry.get_extension() == extension:
 				found.append(path)
 		entry = handle.get_next()
 	handle.list_dir_end()

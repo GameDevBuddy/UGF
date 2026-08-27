@@ -25,9 +25,14 @@ extends FrameworkTestCase
 const BUS_SCRIPT: String = "res://addons/universal_gameplay/core/event_bus.gd"
 const CORE_SCRIPT: String = "res://addons/universal_gameplay/core/framework_core.gd"
 
+## Its own directory under [code]user://[/code] so the slice cannot collide
+## with the save platform suite's slots, whichever order they run in.
+const SAVE_DIRECTORY: String = "user://ugf_slice_c_saves"
+
 var bus: Node = null
 var core: Node = null
 var saves: SaveService = null
+var backend: FileSaveBackend = null
 var missions: MissionService = null
 var published: Array[FrameworkEvent] = []
 
@@ -82,7 +87,14 @@ func before_each() -> void:
 	saves = SaveService.new()
 	saves.name = "SaveService"
 	add_test_node(saves)
-	saves.configure(SaveBackend.new(), core)
+	# The on-disk backend, not the in-memory default. The default round-trips a
+	# Dictionary, and Dictionary.duplicate(true) copies an Object by reference:
+	# a component that leaked a live ItemInstance or Resource into its record
+	# would come back perfect there and null through FileAccess.store_var. The
+	# name of this test says "save file", so it writes one.
+	backend = FileSaveBackend.create(SAVE_DIRECTORY)
+	backend.clear()
+	saves.configure(backend, core)
 
 	missions = MissionService.new()
 	missions.name = "MissionService"
@@ -99,6 +111,14 @@ func before_each() -> void:
 		SurvivalFixtures.find(survivor, InteractorComponent) as InteractorComponent
 	)
 	state = SurvivalFixtures.find(survivor, SemanticState) as SemanticState
+
+
+func after_each() -> void:
+	# Nodes are freed for us; files are not. A slot left behind would outlive
+	# the run and let the next one's "the second world starts empty" pass on
+	# what this one wrote.
+	if backend != null:
+		backend.clear()
 
 
 # --- Composition ----------------------------------------------------------
@@ -211,7 +231,11 @@ func _craft_objective(count: int = 2) -> ObjectiveDefinition:
 # --- The slice ------------------------------------------------------------
 
 func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
-	var thicket := _thicket(2)
+	# Three charges, not two: the recipe wants eight fibre and three harvests
+	# bring twelve. The remainder is deliberate -- a bag that comes back empty
+	# of everything the craft spent proves nothing that an inventory restoring
+	# nothing at all would not also produce.
+	var thicket := _thicket(3)
 	var quest := MissionFixtures.mission(&"mission.rations", [_craft_objective(2)])
 	assert_ok(missions.start(quest), "the mission watching the chain is running")
 	assert_ok(saves.register_entity(survivor), "the survivor can be saved")
@@ -231,7 +255,12 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 		inventory.count(&"item.fibre"), 8,
 		"and a second harvest stacked rather than replacing"
 	)
-	assert_true(thicket.is_depleted(), "two charges is all the thicket had")
+	assert_ok(_cut(thicket), "and one more after that")
+	assert_eq(
+		inventory.count(&"item.fibre"), 12,
+		"so the bag holds more than the recipe is going to ask for"
+	)
+	assert_true(thicket.is_depleted(), "three charges is all the thicket had")
 	assert_err(
 		_cut(thicket), &"node.depleted",
 		"a spent node refuses through the pipeline, not only through harvest()"
@@ -243,8 +272,8 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 		"the gathered fibre satisfies a recipe Crafting never heard gathering describe"
 	)
 	assert_eq(
-		inventory.count(&"item.fibre"), 0,
-		"the ingredients were spent out of the same bag gathering filled"
+		inventory.count(&"item.fibre"), 4,
+		"the recipe took its eight out of the same bag gathering filled, and no more"
 	)
 	assert_eq(
 		inventory.count(&"item.ration"), 2, "and the recipe's output arrived in it"
@@ -252,13 +281,20 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 
 	var crafted := _events(GameplayNames.EVENT_ITEM_CRAFTED)
 	assert_size(crafted, 1, "CraftEventAdapter promoted the craft to the bus")
-	assert_eq(crafted[0].recipe_id, &"recipe.ration", "the event names the recipe used")
-	assert_eq(crafted[0].item_id, &"item.ration", "and what came out of it")
-	assert_eq(crafted[0].quantity, 2, "and how many, so an objective can count them")
-	assert_eq(
-		crafted[0].category, &"item.consumable",
-		"and the category, so an objective can ask for any consumable"
-	)
+	# Guarded rather than indexed blind. Reading crafted[0] on an empty array
+	# is a runtime error, and GDScript abandons the method where it happens --
+	# which would mean a broken craft link took the needs, status and
+	# persistence assertions below down with it instead of failing them.
+	if not crafted.is_empty():
+		assert_eq(
+			crafted[0].recipe_id, &"recipe.ration", "the event names the recipe used"
+		)
+		assert_eq(crafted[0].item_id, &"item.ration", "and what came out of it")
+		assert_eq(crafted[0].quantity, 2, "and how many, so an objective can count them")
+		assert_eq(
+			crafted[0].category, &"item.consumable",
+			"and the category, so an objective can ask for any consumable"
+		)
 	assert_true(
 		missions.has_completed(&"mission.rations"),
 		"which is all a craft objective needs, with no module knowing a mission exists"
@@ -294,7 +330,32 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 	)
 
 	# --- 5. Persistence ----------------------------------------------------
+	# Saved hungry, and saved mid-regrowth, both on purpose. A survivor
+	# restored above the threshold cannot fail a status check -- a freshly
+	# composed one has the flag off anyway -- and a depleted node reads its
+	# definition's full respawn time until something ticks it, so a restored
+	# 60.0 says only what charges == 0 already said. Both numbers below are
+	# ones only a genuinely persisted value can produce.
+	needs.tick(70.0)
+	assert_almost_eq(
+		needs.get_value(&"need.hunger"), 15.0, 0.001,
+		"seventy more seconds and the meal has worn off"
+	)
+	assert_true(
+		state.has_state(hunger.low_state), "so the state is back on when the save is taken"
+	)
+
+	thicket.tick(15.0)
+	assert_almost_eq(
+		thicket.get_time_until_respawn(), 45.0, 0.001,
+		"and the thicket is a quarter of the way back"
+	)
+
 	assert_ok(saves.save(&"slot_slice_c"), "the run is written to a slot")
+	assert_true(
+		FileAccess.file_exists(SAVE_DIRECTORY.path_join("slot_slice_c.save")),
+		"and there is a file on disk to show for it"
+	)
 
 	# Loaded into a world that was never gathered from, rather than back over
 	# the objects that produced it: restoring onto live state can pass while
@@ -302,7 +363,7 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 	saves.unregister_entity(survivor)
 	saves.unregister_entity(thicket.get_entity())
 	var rebuilt := _survivor("Rebuilt", &"survivor")
-	var regrown := _thicket(2, &"thicket", "Regrown")
+	var regrown := _thicket(3, &"thicket", "Regrown")
 	assert_ok(saves.register_entity(rebuilt))
 	assert_ok(saves.register_entity(regrown.get_entity()))
 
@@ -315,31 +376,44 @@ func test_the_survival_slice_runs_from_the_thicket_to_the_save_file() -> void:
 		rebuilt_needs.get_value(&"need.hunger"), 100.0, 0.001,
 		"the second world starts well fed, so nothing below can be a leftover"
 	)
+	assert_false(
+		rebuilt_state.has_state(hunger.low_state),
+		"with nothing flagged on it, so the flag below has to arrive with the save"
+	)
 	assert_true(rebuilt_bag.is_empty(), "and empty handed")
-	assert_eq(regrown.get_charges(), 2, "and its thicket is untouched")
+	assert_eq(regrown.get_charges(), 3, "and its thicket is untouched")
+	assert_almost_eq(
+		regrown.get_time_until_respawn(), 0.0, 0.001,
+		"with no respawn pending, so 45 below cannot be a number it already had"
+	)
 
 	assert_ok(saves.load_slot(&"slot_slice_c"), "the slot loads")
 
 	assert_almost_eq(
-		rebuilt_needs.get_value(&"need.hunger"), 85.0, 0.001,
-		"needs came back at the value eating left them at"
+		rebuilt_needs.get_value(&"need.hunger"), 15.0, 0.001,
+		"needs came back where the meal and the decay after it left them"
 	)
 	assert_eq(
 		rebuilt_bag.count(&"item.ration"), 1, "the uneaten ration came back with them"
 	)
 	assert_eq(
-		rebuilt_bag.count(&"item.fibre"), 0,
-		"and the fibre the craft consumed stayed consumed"
+		rebuilt_bag.count(&"item.fibre"), 4,
+		"and so did the fibre the craft did not spend"
 	)
-	assert_false(
+	# Two things could put this flag back -- the saved state record, or
+	# NeedsComponent re-deriving the band as it restores the value -- and the
+	# gate is on the outcome rather than the route: a survivor who loads a
+	# starving save and is not flagged starving is broken either way. Gutting
+	# both is what turns this red; gutting either alone does not.
+	assert_true(
 		rebuilt_state.has_state(hunger.low_state),
-		"a survivor restored above the threshold is not flagged hungry"
+		"and the hungry flag came back onto a survivor composed well fed"
 	)
 	assert_eq(regrown.get_charges(), 0, "the worked thicket came back worked")
 	assert_true(regrown.is_depleted(), "and still spent")
 	assert_almost_eq(
-		regrown.get_time_until_respawn(), 60.0, 0.001,
-		"with its respawn timer where the save left it"
+		regrown.get_time_until_respawn(), 45.0, 0.001,
+		"with its respawn clock where the save left it, not at the definition's default"
 	)
 
 
@@ -383,13 +457,14 @@ func test_a_craft_objective_is_not_satisfied_by_getting_the_item_another_way() -
 
 	var crafted := _events(GameplayNames.EVENT_ITEM_CRAFTED)
 	assert_size(crafted, 1, "this time a craft was announced")
-	assert_eq(
-		crafted[0].quantity, 2,
-		(
-			"and it counted the output even though the bag already held some, "
-			+ "which is what an objective counting crafts depends on"
+	if not crafted.is_empty():
+		assert_eq(
+			crafted[0].quantity, 2,
+			(
+				"and it counted the output even though the bag already held some, "
+				+ "which is what an objective counting crafts depends on"
+			)
 		)
-	)
 	assert_true(
 		missions.has_completed(&"mission.rations"),
 		"and the same objective completed on it"
