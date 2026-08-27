@@ -20,6 +20,13 @@ extends EntityDefinition
 ## How this character moves. Shared across every character that moves alike.
 @export var movement: MovementProfile
 
+## Attributes and depletable resources. Optional: an entity can be damageable
+## with a flat maximum and no attributes at all.
+@export var stats: StatsProfile
+
+## Armour and resistances. Optional; absent means every hit lands in full.
+@export var resistances: ResistanceProfile
+
 ## How this character's rig is driven. Optional: an NPC with no visible mesh
 ## needs none.
 @export var animation: AnimationProfile
@@ -47,6 +54,10 @@ func validate() -> ValidationResult:
 		)
 	else:
 		result.merge(movement.validate())
+	if stats != null:
+		result.merge(stats.validate())
+	if resistances != null:
+		result.merge(resistances.validate())
 	if animation != null:
 		result.merge(animation.validate())
 	if camera != null:
