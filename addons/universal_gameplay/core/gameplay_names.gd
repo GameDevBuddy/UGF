@@ -120,6 +120,14 @@ const STAT_RESISTANCE: StringName = &"stat.resistance"
 const EVENT_ACTOR_DIED: StringName = &"actor_died"
 const EVENT_DIALOGUE_COMPLETED: StringName = &"dialogue_completed"
 const EVENT_DIALOGUE_CHOICE: StringName = &"dialogue_choice"
+const EVENT_ITEM_ACQUIRED: StringName = &"item_acquired"
+const EVENT_NARRATIVE_FLAG: StringName = &"narrative_flag_changed"
+const EVENT_NARRATIVE_COUNTER: StringName = &"narrative_counter_changed"
+const EVENT_AREA_ENTERED: StringName = &"area_entered"
+const EVENT_MISSION_STARTED: StringName = &"mission_started"
+const EVENT_MISSION_COMPLETED: StringName = &"mission_completed"
+const EVENT_MISSION_FAILED: StringName = &"mission_failed"
+const EVENT_OBJECTIVE_COMPLETED: StringName = &"objective_completed"
 
 # --- AI activity names ---------------------------------------------------
 #
@@ -133,6 +141,21 @@ const AI_STATE_INVESTIGATE: StringName = &"ai.investigate"
 const AI_STATE_ENGAGE: StringName = &"ai.engage"
 const AI_STATE_FLEE: StringName = &"ai.flee"
 const AI_STATE_DEAD: StringName = &"ai.dead"
+
+# --- Objective kinds -----------------------------------------------------
+#
+# What an objective is asking for, for presentation: an icon, a sort order, a
+# tracker line. Vocabulary rather than an enum, because Implementation Plan 19
+# lists fourteen baseline kinds and a project will invent a fifteenth.
+
+const OBJECTIVE_KILL: StringName = &"objective.kill"
+const OBJECTIVE_ACQUIRE: StringName = &"objective.acquire"
+const OBJECTIVE_DELIVER: StringName = &"objective.deliver"
+const OBJECTIVE_TALK: StringName = &"objective.talk"
+const OBJECTIVE_REACH: StringName = &"objective.reach"
+const OBJECTIVE_INTERACT: StringName = &"objective.interact"
+const OBJECTIVE_SURVIVE: StringName = &"objective.survive"
+const OBJECTIVE_CUSTOM: StringName = &"objective.custom"
 
 # --- Core service identifiers --------------------------------------------
 
