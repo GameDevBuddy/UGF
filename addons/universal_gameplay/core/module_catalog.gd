@@ -47,6 +47,7 @@ const MODULES: Dictionary[StringName, String] = {
 	&"module.missions": "res://addons/universal_gameplay/missions/missions_module.gd",
 	&"module.narrative": "res://addons/universal_gameplay/narrative/narrative_module.gd",
 	&"module.networking": "res://addons/universal_gameplay/networking/networking_module.gd",
+	&"module.progression": "res://addons/universal_gameplay/progression/progression_module.gd",
 	&"module.save": "res://addons/universal_gameplay/persistence/persistence_module.gd",
 	&"module.spawn": "res://addons/universal_gameplay/spawn/spawn_module.gd",
 	&"module.stats": "res://addons/universal_gameplay/stats/stats_module.gd",

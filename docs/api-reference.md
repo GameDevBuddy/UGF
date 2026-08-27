@@ -356,6 +356,16 @@ instantiated by the catalog, not referenced globally), and events have none
 | `SaveService` | `FrameworkService` | Captures the world, writes it, and puts it back. |
 | `SaveSlot` | `RefCounted` | What a load menu shows without reading the whole save. |
 
+## `progression/`
+
+| Class | Extends | Summary |
+| --- | --- | --- |
+| `ProgressionComponent` | `FrameworkComponent` | The capability of getting better at things. |
+| `ProgressionEventAdapter` | `FrameworkComponent` | Promotes levelling up to a cross-feature fact. |
+| `ProgressionProfile` | `Resource` | The tracks and skills one kind of character can advance. |
+| `ProgressionTrackDefinition` | `FrameworkDefinition` | One thing a character gets better at, and what it costs to do so. |
+| `SkillDefinition` | `FrameworkDefinition` | Something a character can unlock by spending points. |
+
 ## `spawn/`
 
 | Class | Extends | Summary |

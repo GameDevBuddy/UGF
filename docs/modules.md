@@ -37,6 +37,7 @@ when absent -- a missing optional module is a valid state, never an error.
 | Missions | `module.missions` | — | `module.inventory`, `module.items`, `module.narrative` |
 | Narrative State | `module.narrative` | — | — |
 | Networking | `module.networking` | — | `module.combat`, `module.entity`, `module.inventory`, `module.items` |
+| Progression | `module.progression` | — | `module.entity`, `module.narrative`, `module.stats` |
 | Persistence | `module.save` | `module.entity` | — |
 | Spawn | `module.spawn` | `module.world_state` | `module.ai`, `module.entity`, `module.narrative`, `module.vehicles` |
 | Stats | `module.stats` | `module.entity` | — |
@@ -185,6 +186,12 @@ Flags, variables, counters and relationships that outlive the entities they desc
 `module.networking` — `res://addons/universal_gameplay/networking/networking_module.gd`
 
 An authority facade in front of mutation APIs the modules already had, with a transport seam and server-side validation.
+
+### Progression
+
+`module.progression` — `res://addons/universal_gameplay/progression/progression_module.gd`
+
+Experience tracks, levels, skill points and perk unlocks. Grants stat modifiers and semantic states; never runs behaviour itself.
 
 ### Persistence
 
