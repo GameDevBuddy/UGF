@@ -27,6 +27,13 @@ extends EntityDefinition
 ## Armour and resistances. Optional; absent means every hit lands in full.
 @export var resistances: ResistanceProfile
 
+## What this character can carry. Optional: an NPC that never holds anything
+## needs no container.
+@export var inventory: InventoryProfile
+
+## Equipment slots and starting gear. Optional; absent means it wears nothing.
+@export var loadout: LoadoutProfile
+
 ## How this character's rig is driven. Optional: an NPC with no visible mesh
 ## needs none.
 @export var animation: AnimationProfile
@@ -58,6 +65,10 @@ func validate() -> ValidationResult:
 		result.merge(stats.validate())
 	if resistances != null:
 		result.merge(resistances.validate())
+	if inventory != null:
+		result.merge(inventory.validate())
+	if loadout != null:
+		result.merge(loadout.validate())
 	if animation != null:
 		result.merge(animation.validate())
 	if camera != null:
