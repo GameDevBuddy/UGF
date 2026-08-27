@@ -221,6 +221,21 @@ func test_a_character_with_no_dialogue_simply_has_nothing_to_say() -> void:
 	assert_false(talk.can_talk())
 
 
+func test_the_faction_adapter_is_wired_to_the_ai() -> void:
+	var character := _spawn()
+	var adapter := character.get_node("FactionAIAdapter") as FactionAIAdapter
+	assert_eq(adapter.controller, character.get_node("AIControllerComponent"))
+
+
+func test_a_character_with_no_allegiance_still_fights_everything() -> void:
+	# The shipped scene carries a faction component that most content leaves
+	# blank; it must not turn every NPC pacifist (rule 31).
+	var character := _spawn()
+	var ai := character.get_node("AIControllerComponent") as AIControllerComponent
+	var stranger := add_test_node(Node3D.new())
+	assert_true(ai.get_hostility_provider().is_hostile(character, stranger))
+
+
 func test_a_character_with_no_role_thinks_about_nothing() -> void:
 	var character := _spawn()
 	var ai := character.get_node("AIControllerComponent") as AIControllerComponent

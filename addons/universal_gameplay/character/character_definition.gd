@@ -46,6 +46,10 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## Which group this character belongs to. Optional: an entity with no
+## allegiance is neutral to everyone, which is what wildlife and scenery are.
+@export var faction: FactionDefinition
+
 ## What this character says when talked to. Optional: most characters say
 ## nothing, and a project that installs no Dialogue module leaves it blank.
 @export var dialogue: DialogueDefinition
@@ -97,6 +101,8 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	if faction != null:
+		result.merge(faction.validate())
 	if dialogue != null:
 		result.merge(dialogue.validate())
 	if role != null:
