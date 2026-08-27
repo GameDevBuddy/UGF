@@ -29,6 +29,27 @@ const STATE_SPRINTING: StringName = &"state.movement.sprinting"
 const STATE_CROUCHING: StringName = &"state.movement.crouching"
 const STATE_AIRBORNE: StringName = &"state.movement.airborne"
 const STATE_MOVING: StringName = &"state.movement.moving"
+const STATE_INTERACTING: StringName = &"state.interacting"
+
+## Set by [ToggleStateAction] on anything that opens: a door, a chest, a hatch.
+## Generic enough to be framework vocabulary; a game's own states are not
+## (rule 29).
+const STATE_OPEN: StringName = &"state.open"
+const STATE_LOCKED: StringName = &"state.locked"
+
+# --- Semantic interaction verbs ------------------------------------------
+#
+# What an interaction is, independent of the prose shown for it. Presentation
+# picks an icon from the verb; the prompt string stays free to be localised.
+
+const VERB_USE: StringName = &"verb.use"
+const VERB_OPEN: StringName = &"verb.open"
+const VERB_CLOSE: StringName = &"verb.close"
+const VERB_TAKE: StringName = &"verb.take"
+const VERB_TALK: StringName = &"verb.talk"
+const VERB_ENTER: StringName = &"verb.enter"
+const VERB_EXIT: StringName = &"verb.exit"
+const VERB_SEARCH: StringName = &"verb.search"
 
 # --- Semantic input actions ----------------------------------------------
 #

@@ -43,6 +43,12 @@ signal control_changed(controlling: bool)
 ## Forward mouse motion to the camera while controlling.
 @export var mouse_look: bool = true
 
+## Optional interactor, so the interact button reaches the same pipeline an AI
+## uses. Absent -- a project with no Interaction module, or a character that
+## never uses anything -- the button does nothing and everything else works
+## (rule 31).
+@export var interactor: InteractorComponent
+
 var _router: InputRouter = null
 var _input_context: InputContext = null
 var _controlling: bool = false
@@ -156,6 +162,8 @@ func drive(delta: float) -> void:
 		# A menu or a cutscene is up. Release what is held rather than leaving
 		# the character frozen mid-stride holding the last input it saw.
 		movement.stop()
+		if interactor != null:
+			interactor.cancel(&"control_suppressed")
 		return
 
 	var basis := camera.get_movement_basis() if camera != null else _get_entity_basis()
@@ -165,8 +173,24 @@ func drive(delta: float) -> void:
 	if _router.was_just_pressed(GameplayNames.ACTION_JUMP):
 		movement.request_jump()
 
+	_drive_interaction()
+
 	if camera != null:
 		camera.tick(delta)
+
+
+## Interact is a press to start and a release to give up.
+##
+## Holding is what a timed interaction is, and treating the release as a cancel
+## is the whole of it -- there is no separate "hold" input. An interaction the
+## designer marked uninterruptible ignores the release and finishes.
+func _drive_interaction() -> void:
+	if interactor == null:
+		return
+	if _router.was_just_pressed(GameplayNames.ACTION_INTERACT):
+		interactor.interact()
+	elif interactor.is_busy() and not _router.is_pressed(GameplayNames.ACTION_INTERACT):
+		interactor.cancel(&"released")
 
 
 ## Applies look input to the camera. Mouse motion arrives here from
