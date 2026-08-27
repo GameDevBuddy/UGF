@@ -255,6 +255,20 @@ func test_everybody_can_be_ejected_at_once() -> void:
 	assert_eq(seats.get_occupant_count(), 0)
 
 
+func test_an_occupant_freed_out_from_under_the_vehicle_reads_as_empty() -> void:
+	# Reading a freed instance out of a Dictionary into a typed local throws
+	# before is_instance_valid() can be reached, so this crashed rather than
+	# answering null. A destroyed passenger must not take the car with it.
+	assert_ok(seats.enter(driver, &"seat.driver"))
+	driver.get_parent().remove_child(driver)
+	driver.free()
+
+	assert_null(seats.get_occupant(&"seat.driver"))
+	assert_null(seats.get_driver())
+	assert_empty(seats.get_occupants())
+	assert_eq(seats.get_occupant_count(), 0)
+
+
 # --- Semantic state --------------------------------------------------------
 
 func test_occupancy_is_mirrored_onto_semantic_state() -> void:

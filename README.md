@@ -9,7 +9,7 @@ signals handle local communication, and a narrow event bus carries cross-feature
 
 ---
 
-## Status: M0 – M13 complete ✅
+## Status: M0 – M14 complete ✅
 
 M0 locks the architecture before any gameplay system is written. M1 builds the universal
 runtime entity on top of it. M2 makes that entity a playable character. M3 gives it numbers
@@ -17,7 +17,8 @@ that other systems change, and a way to die. M4 gives it things to carry and wea
 it a way to use the world. M6 gives it a way to fight. M7 lets it do all of that
 without a player. M8 gives the world something to say and somewhere to remember
 it. M9 gives the player a reason to do any of it. M10 gives the world sides to take. M11 gives it
-an economy. M12 lets it be lived in. M13 gives it something to drive. All fourteen are green.
+an economy. M12 lets it be lived in. M13 gives it something to drive. M14 fills it with
+people without making it slow. All fifteen are green.
 
 | M0 deliverable | Where |
 | --- | --- |
@@ -387,6 +388,71 @@ the run still printed `RESULT: PASS` — see the findings below.
 
 ---
 
+### M14 — Spawn + World State + Traffic ✅
+
+| M14 deliverable | Where |
+| --- | --- |
+| SpawnService | `spawn/spawn_service.gd` |
+| Encounter definitions | `spawn/encounter_definition.gd` |
+| Population budgets | `world/region_definition.gd`, `world_state_service.gd` |
+| World state | `world/world_state_service.gd`, `region_tracker.gd` |
+| Spawn pools / anchors | `spawn/spawn_definition.gd`, `spawn_entry.gd`, `spawn_anchor.gd` |
+| Despawn policies | `spawn/despawn_policy.gd` |
+| Traffic hooks | a `SpawnDefinition` with a category — no traffic class, see below |
+
+**M14 exit gate:**
+
+- *Region population scales without global per-frame scans* —
+  `test_world_scaling.gd::test_the_cost_of_a_tick_does_not_grow_with_the_world`
+- *A tick examines only what is awake* —
+  `test_world_scaling.gd::test_a_tick_examines_only_the_regions_that_are_awake`
+- *Nothing scans the tree* —
+  `test_world_scaling.gd::test_nothing_in_the_spawn_or_world_services_scans_the_scene_tree`
+- *Entities report their own region* —
+  `test_world_scaling.gd::test_an_entity_reports_its_own_region_rather_than_being_found`
+
+```
+79 suite(s), 1970 test(s), 1970 passed, 0 failed, 5625 assertions
+RESULT: PASS
+```
+
+**This milestone's exit gate is a cost, not a behaviour**, and that changed how it was tested.
+Everything here could work perfectly and M14 would still have failed if a tick got more
+expensive as the world grew — which is not something you can see by watching a city look busy.
+So `SpawnService` reports what it actually examined, and the suite asserts that number stays flat
+while the world grows by two orders of magnitude: fifty regions and five thousand people cost
+exactly what one region costs, because forty-nine of them are asleep. No timing is involved. A
+timing test on CI is a coin flip; a count is a fact.
+
+Three things make it true, and each is a design decision rather than an optimisation:
+
+- **Nothing is discovered.** Anchors are registered into per-region buckets, pools match regions
+  by tag. A test reads both service files and fails on `get_nodes_in_group`, `get_tree()`,
+  `find_children` or `get_children(` — verified by adding a group scan and watching it go red.
+- **Nothing is counted.** Population lives in `WorldStateService`, maintained on entry and exit.
+  Asking how full a district is, is a dictionary lookup at any world size.
+- **Entities report their own region.** The obvious design walks every entity each frame asking
+  where it is, which is precisely the scan the gate forbids. Inverting it makes the cost
+  proportional to movement between regions — and even that is skipped until an entity has moved a
+  threshold distance, so a crowd at a bus stop costs nothing at all.
+
+**`WorldStateService` holds no flags,** which is a deliberate deviation from the plan's wording.
+`NarrativeStateService` already owns flags, variables and counters; a region flag is
+`narrative.set_flag(&"region.docks.cleared")` — a semantic id in the store that already exists,
+with no second store to keep in sync (rule 23, rule 32). What lives in World State is what is
+genuinely not narrative: who is where, and how many of them.
+
+**There is no traffic class,** and the plan does not need one. Traffic is a `SpawnDefinition`
+whose entries are vehicles, whose anchors are lay-bys and whose despawn policy is aggressive —
+the same machinery pedestrians use. Three tests prove it rather than a doc comment asserting it,
+including one that fills a district with cars and pedestrians on independent budgets and sweeps
+only the cars away.
+
+Spawning goes through `EntityFactory`, the same load path saves use, so a spawned entity is built
+exactly the way a loaded one is rather than by a second path that drifts.
+
+---
+
 ---
 
 ## Running the tests
@@ -438,8 +504,10 @@ Communication rules, in the order you should reach for them:
 
 ## Decisions made where the source documents conflict
 
-The Ontology Rulebook and the Implementation Plan agree on principles and disagree in two
-places in their reference code. Both are resolved here deliberately.
+The Ontology Rulebook and the Implementation Plan agree on principles and disagree in a few
+places in their reference code. Each is resolved here deliberately, and the last two are places
+where the plan is internally consistent but following it literally would have duplicated
+something the framework already had.
 
 ### 1. `apply_damage(context)`, not `apply_damage(amount, context)`
 
@@ -493,6 +561,22 @@ would be inherited is the abstraction rule 23 asks us not to add.
 The consequence worth stating: a project porting a graph from a tool that has explicit
 Action and Jump nodes maps both onto a bare `DialogueNode`. `DialogueFixtures.action_node`
 in the test support shows the shape.
+
+---
+
+### 5. World State holds no flags
+
+The plan lists "WorldStateService for persistent global/region flags". `NarrativeStateService`
+already owns flags, variables, counters and relationships, and building a second store of them
+would be the same idea twice (rule 23) — two things to save, two to migrate, and two that can
+disagree about whether the docks are cleared.
+
+So `WorldStateService` owns only what is genuinely not narrative: which regions exist, which are
+awake, and who is in them. A region flag is `narrative.set_flag(&"region.docks.cleared")`, which
+is a semantic id in the store that already exists (rule 32) and needs no new code at all.
+
+The cost is that a project reading the plan literally will look for `world.set_region_flag()` and
+not find it. That is worth one line of documentation; a duplicated store is not.
 
 ---
 
@@ -559,6 +643,14 @@ to prove a script is sound — `test_script_compilation.gd` passed while `Wallet
 method shadowing `Object._set` with a different signature. `can_instantiate()` is false for a
 script that did not compile, and asserting on it names the file. Verified by deliberately
 breaking a script and watching the suite fail.
+
+**A freed instance cannot even be *assigned* to a typed local.** `var node: Node = dict[key]`
+throws `Trying to assign invalid previously freed instance` — before `is_instance_valid(node)` on
+the next line can run. So the guard has to come first and the type second: read into a `Variant`,
+check, then cast. Any registry holding nodes has this latent in it; it cost three files here
+(`WorldStateService`, and `SeatComponent` and `EnvironmentZone` from earlier milestones where no
+test had yet freed a tracked entity). Worth grepping for `is_instance_valid` preceded by a typed
+assignment.
 
 **A test file that fails to compile is skipped silently, and the run still says PASS.** The
 runner checked `load(path) != null` before calling `script.new()` — but `load()` returns a
@@ -891,6 +983,19 @@ addons/universal_gameplay/
 │   ├── vehicle_event.gd           …as a cross-feature fact
 │   ├── vehicle.tscn               the shipped composition
 │   └── vehicles_module.gd         the module manifest
+├── world/
+│   ├── region_definition.gd       a district, and what it will hold
+│   ├── world_state_service.gd     who is where. counted on entry, never scanned
+│   ├── region_tracker.gd          an entity reporting itself, so nothing hunts
+│   └── world_module.gd            the module manifest
+├── spawn/
+│   ├── spawn_entry.gd             one thing a pool can produce
+│   ├── spawn_definition.gd        a pool, its density and its region tags
+│   ├── encounter_definition.gd    a group that arrives together
+│   ├── despawn_policy.gd          when ambient is allowed to vanish
+│   ├── spawn_anchor.gd            a doorway, a lay-by. bucketed by region
+│   ├── spawn_service.gd           tops up what is awake, and nothing else
+│   └── spawn_module.gd            the module manifest
 ├── debug/entity_inspector.gd      what is this entity, and would it persist?
 ├── validation/                    content validation and cycle detection
 └── plugin.gd / plugin.cfg         one-click autoload installation
@@ -912,7 +1017,7 @@ Game content lives outside the addon entirely, in `res://game/`. The framework k
 
 ## Roadmap
 
-M0 through M13 are done. The build order follows dependency, not feature appeal.
+M0 through M14 are done. The build order follows dependency, not feature appeal.
 
 | | Milestone | | | Milestone |
 | --- | --- | --- | --- | --- |
@@ -920,7 +1025,7 @@ M0 through M13 are done. The build order follows dependency, not feature appeal.
 | **M1** | **Entity + save identity** ✅ | | **M11** | **Commerce + vendors + loot** ✅ |
 | **M2** | **Character + input + locomotion** ✅ | | **M12** | **Crafting + survival** ✅ |
 | **M3** | **Stats + health + damage + effects** ✅ | | **M13** | **Vehicles** ✅ |
-| **M4** | **Items + inventory + equipment** ✅ | | M14 | Spawn + world state + traffic |
+| **M4** | **Items + inventory + equipment** ✅ | | **M14** | **Spawn + world state + traffic** ✅ |
 | **M5** | **Interaction platform** ✅ | | M15 | Crime / heat |
 | **M6** | **Combat + weapons** ✅ | | M16 | Full persistence |
 | **M7** | **AI + NPC roles** ✅ | | M17 | UI framework + debug tooling |

@@ -321,6 +321,22 @@ func test_an_unloaded_zone_stops_affecting_who_was_inside() -> void:
 	assert_almost_eq(needs.get_decay_scale(&"need.hunger"), 1.0)
 
 
+func test_a_zone_whose_occupant_was_freed_unloads_cleanly() -> void:
+	# Same trap as the vehicle seat: the zone held a typed reference to a
+	# component that no longer exists, and lifting on unload crashed on the
+	# read rather than skipping it.
+	var zone := _zone(3.0)
+	add_test_node(zone)
+	assert_true(zone.apply_to(entity))
+
+	entity.get_parent().remove_child(entity)
+	entity.free()
+
+	zone.get_parent().remove_child(zone)
+	zone.free()
+	assert_true(true, "unloading a zone over a freed occupant does not crash")
+
+
 func test_mismatched_zone_arrays_are_an_error() -> void:
 	var zone := EnvironmentZone.new()
 	var affects: Array[StringName] = [&"need.hunger", &"need.thirst"]
