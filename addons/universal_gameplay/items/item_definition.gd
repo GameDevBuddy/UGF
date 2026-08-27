@@ -43,6 +43,12 @@ extends EntityDefinition
 ## merely becoming unusable.
 @export var breaks_when_worn_out: bool = false
 
+@export_group("Combat")
+## What this swings or fires like. Null is the normal case: most items are not
+## weapons, and an item with a weapon profile need not be equippable -- a
+## thrown rock is both.
+@export var weapon: WeaponProfile
+
 @export_group("Interaction")
 ## What can be done to this item while it is lying in the world: take it,
 ## examine it, hotwire it. Empty is the usual case -- a pickup is normally
@@ -118,6 +124,8 @@ func validate() -> ValidationResult:
 		)
 	if equipment != null:
 		result.merge(equipment.validate())
+	if weapon != null:
+		result.merge(weapon.validate())
 	for offered in interactions:
 		if offered != null:
 			result.merge(offered.validate())

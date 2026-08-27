@@ -484,3 +484,89 @@ func test_a_character_with_no_interactor_still_drives() -> void:
 	source.hold(GameplayNames.ACTION_MOVE_FORWARD)
 	_drive()
 	assert_true(movement.is_moving())
+
+
+# --- Combat ---------------------------------------------------------------
+#
+# As with interaction, what these prove is that the wire exists. The attack
+# pipeline itself is test_combat_component.gd's business; a disconnected
+# attack button fails silently and everything else about the character works.
+
+func _wire_combat() -> CombatComponent:
+	var weapon := WeaponComponent.new()
+	weapon.auto_tick = false
+	weapon.profile_override = CombatFixtures.rifle(20.0, 5)
+	entity.add_child(weapon)
+
+	var combat := CombatComponent.new()
+	combat.auto_tick = false
+	combat.profile_override = CombatFixtures.combat_profile()
+	combat.weapon = weapon
+	entity.add_child(combat)
+
+	var context := EntityContext.create(entity, definition)
+	weapon.initialize(context)
+	combat.initialize(context)
+	combat.set_hit_provider(FakeHitProvider.new())
+	controller.combat = combat
+	return combat
+
+
+func test_the_attack_button_fires() -> void:
+	var combat := _wire_combat()
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_ATTACK)
+	controller.drive(0.05)
+	assert_eq(combat.weapon.get_magazine(), 4)
+
+
+func test_releasing_stops_holding_the_trigger() -> void:
+	var combat := _wire_combat()
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_ATTACK)
+	controller.drive(0.05)
+	assert_true(combat.is_holding())
+
+	source.advance_frame()
+	source.release(GameplayNames.ACTION_ATTACK)
+	controller.drive(0.05)
+	assert_false(combat.is_holding())
+
+
+func test_the_reload_button_reloads() -> void:
+	var combat := _wire_combat()
+	controller.take_control()
+
+	source.press(GameplayNames.ACTION_ATTACK)
+	controller.drive(0.05)
+	combat.weapon.tick(1.0)
+
+	source.advance_frame()
+	source.release(GameplayNames.ACTION_ATTACK)
+	source.press(GameplayNames.ACTION_RELOAD)
+	controller.drive(0.05)
+	assert_true(combat.weapon.is_reloading())
+
+
+func test_a_menu_releases_the_trigger() -> void:
+	var combat := _wire_combat()
+	controller.take_control()
+	source.press(GameplayNames.ACTION_ATTACK)
+	controller.drive(0.05)
+	assert_true(combat.is_holding())
+
+	router.push_context(InputContexts.ui())
+	controller.drive(0.05)
+	assert_false(combat.is_holding())
+
+
+func test_a_character_with_no_combat_still_drives() -> void:
+	# The Combat module is optional; the attack button pressed on a character
+	# that has none must not be an error (rule 31).
+	controller.take_control()
+	source.press(GameplayNames.ACTION_ATTACK)
+	source.hold(GameplayNames.ACTION_MOVE_FORWARD)
+	_drive()
+	assert_true(movement.is_moving())

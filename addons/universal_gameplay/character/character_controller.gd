@@ -49,6 +49,10 @@ signal control_changed(controlling: bool)
 ## (rule 31).
 @export var interactor: InteractorComponent
 
+## Optional combat, so the attack and reload buttons reach the same commands an
+## AI issues. Absent, the buttons do nothing and everything else works.
+@export var combat: CombatComponent
+
 var _router: InputRouter = null
 var _input_context: InputContext = null
 var _controlling: bool = false
@@ -164,6 +168,8 @@ func drive(delta: float) -> void:
 		movement.stop()
 		if interactor != null:
 			interactor.cancel(&"control_suppressed")
+		if combat != null:
+			combat.release()
 		return
 
 	var basis := camera.get_movement_basis() if camera != null else _get_entity_basis()
@@ -174,6 +180,7 @@ func drive(delta: float) -> void:
 		movement.request_jump()
 
 	_drive_interaction()
+	_drive_combat()
 
 	if camera != null:
 		camera.tick(delta)
@@ -191,6 +198,23 @@ func _drive_interaction() -> void:
 		interactor.interact()
 	elif interactor.is_busy() and not _router.is_pressed(GameplayNames.ACTION_INTERACT):
 		interactor.cancel(&"released")
+
+
+## Attack is a press to start and a release to stop, which is what makes one
+## button serve a single-shot rifle, an automatic and a held melee wind-up
+## without the controller knowing which it is holding.
+func _drive_combat() -> void:
+	if combat == null:
+		return
+	if _router.was_just_pressed(GameplayNames.ACTION_ATTACK):
+		combat.hold()
+	elif combat.is_holding() and not _router.is_pressed(GameplayNames.ACTION_ATTACK):
+		combat.release()
+
+	if _router.was_just_pressed(GameplayNames.ACTION_ATTACK_SECONDARY):
+		combat.attack(true)
+	if _router.was_just_pressed(GameplayNames.ACTION_RELOAD) and combat.weapon != null:
+		combat.weapon.reload()
 
 
 ## Applies look input to the camera. Mouse motion arrives here from

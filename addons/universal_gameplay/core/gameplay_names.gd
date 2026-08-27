@@ -30,6 +30,9 @@ const STATE_CROUCHING: StringName = &"state.movement.crouching"
 const STATE_AIRBORNE: StringName = &"state.movement.airborne"
 const STATE_MOVING: StringName = &"state.movement.moving"
 const STATE_INTERACTING: StringName = &"state.interacting"
+const STATE_ATTACKING: StringName = &"state.attacking"
+const STATE_RELOADING: StringName = &"state.reloading"
+const STATE_AIMING: StringName = &"state.aiming"
 
 ## Set by [ToggleStateAction] on anything that opens: a door, a chest, a hatch.
 ## Generic enough to be framework vocabulary; a game's own states are not
@@ -65,6 +68,10 @@ const ACTION_JUMP: StringName = &"jump"
 const ACTION_SPRINT: StringName = &"sprint"
 const ACTION_CROUCH: StringName = &"crouch"
 const ACTION_INTERACT: StringName = &"interact"
+const ACTION_ATTACK: StringName = &"attack"
+const ACTION_ATTACK_SECONDARY: StringName = &"attack_secondary"
+const ACTION_RELOAD: StringName = &"reload"
+const ACTION_AIM: StringName = &"aim"
 
 # --- Input context identifiers -------------------------------------------
 

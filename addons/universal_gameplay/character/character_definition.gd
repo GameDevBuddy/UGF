@@ -46,6 +46,10 @@ extends EntityDefinition
 ## uses the standard on-foot context.
 @export var input_context: InputContext
 
+## How this character fights unarmed, and where its attacks come from.
+## Optional: a civilian that never throws a punch needs none.
+@export var combat: CombatProfile
+
 ## How far this character can reach and how it finds what to reach for.
 ## Optional: a character that never uses anything needs none.
 @export var interaction: InteractorProfile
@@ -84,6 +88,8 @@ func validate() -> ValidationResult:
 		result.merge(camera.validate())
 	if input_context != null:
 		result.merge(input_context.validate())
+	if combat != null:
+		result.merge(combat.validate())
 	if interaction != null:
 		result.merge(interaction.validate())
 	for offered in interactions:

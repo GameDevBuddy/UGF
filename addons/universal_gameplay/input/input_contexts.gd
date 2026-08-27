@@ -25,6 +25,10 @@ static func on_foot() -> InputContext:
 			GameplayNames.ACTION_SPRINT,
 			GameplayNames.ACTION_CROUCH,
 			GameplayNames.ACTION_INTERACT,
+			GameplayNames.ACTION_ATTACK,
+			GameplayNames.ACTION_ATTACK_SECONDARY,
+			GameplayNames.ACTION_AIM,
+			GameplayNames.ACTION_RELOAD,
 		]
 	)
 

@@ -145,6 +145,34 @@ func test_the_controller_is_wired_to_the_interactor() -> void:
 	assert_eq(controller.interactor, character.get_node("InteractorComponent"))
 
 
+func test_the_controller_is_wired_to_combat() -> void:
+	var character := _spawn()
+	var controller := character.get_node("CharacterController") as CharacterController
+	assert_eq(controller.combat, character.get_node("CombatComponent"))
+
+
+func test_combat_is_wired_to_the_weapon_and_the_camera() -> void:
+	# Aim comes off the camera rather than the body, which is what makes a
+	# shot go where the player is looking rather than where their feet point.
+	var character := _spawn()
+	var combat := character.get_node("CombatComponent") as CombatComponent
+	assert_eq(combat.weapon, character.get_node("WeaponComponent"))
+	assert_eq(combat.semantic_state, character.get_node("SemanticState"))
+	assert_eq(combat.aim, character.get_node("CameraYaw/CameraPitch/Camera3D"))
+
+
+func test_the_weapon_is_wired_to_the_semantic_state() -> void:
+	var character := _spawn()
+	var weapon := character.get_node("WeaponComponent") as WeaponComponent
+	assert_eq(weapon.semantic_state, character.get_node("SemanticState"))
+
+
+func test_a_character_with_no_combat_profile_simply_cannot_attack() -> void:
+	var character := _spawn()
+	var combat := character.get_node("CombatComponent") as CombatComponent
+	assert_err(combat.attack(), &"combat.no_attack")
+
+
 func test_the_interactor_is_wired_to_the_semantic_state() -> void:
 	var character := _spawn()
 	var interactor := character.get_node("InteractorComponent") as InteractorComponent
