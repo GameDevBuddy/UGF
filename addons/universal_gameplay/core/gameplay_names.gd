@@ -173,6 +173,8 @@ const EVENT_WANTED_CHANGED: StringName = &"wanted_changed"
 # Core having to grow a case for them (rule 32).
 
 const AI_STATE_IDLE: StringName = &"ai.idle"
+const AI_STATE_FOLLOW: StringName = &"ai.follow"
+const AI_STATE_HOLD: StringName = &"ai.hold"
 const AI_STATE_WANDER: StringName = &"ai.wander"
 const AI_STATE_INVESTIGATE: StringName = &"ai.investigate"
 const AI_STATE_ENGAGE: StringName = &"ai.engage"

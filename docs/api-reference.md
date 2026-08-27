@@ -19,6 +19,7 @@ instantiated by the catalog, not referenced globally), and events have none
 | `AIContext` | `RefCounted` | Everything a brain is given to think with. |
 | `AIControllerComponent` | `FrameworkComponent` | Drives a character from a brain instead of from a gamepad. |
 | `AIMemory` | `RefCounted` | Everything one NPC currently knows about everything else. |
+| `CompanionComponent` | `FrameworkComponent` | Somebody who follows you and does what you tell them. |
 | `DamagePerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory who just hurt it. |
 | `HostilityProvider` | `RefCounted` | Decides whether one entity should fight another. |
 | `InteractionPerceptionAdapter` | `FrameworkComponent` | Tells an NPC's memory that somebody used something in front of it. |
@@ -203,7 +204,9 @@ instantiated by the catalog, not referenced globally), and events have none
 | `DialogueRuntime` | `RefCounted` | One conversation, in progress. |
 | `EndNode` | `DialogueNode` | The conversation is over. |
 | `ItemCondition` | `DialogueCondition` | Asks whether someone is carrying something. |
+| `ItemTransferAction` | `DialogueAction` | Hands something over, or takes it away. |
 | `LineNode` | `DialogueNode` | Somebody says something, and the conversation waits. |
+| `MissionAction` | `DialogueAction` | Starts, completes or abandons a mission from a conversation. |
 | `NarrativeAction` | `DialogueAction` | Writes to the narrative state: raise a flag, set a variable, bump a counter, change how a faction feels. |
 | `NarrativeCondition` | `DialogueCondition` | Asks the narrative state a question: is this flag raised, is this counter high enough, does this faction like us. |
 | `TalkAction` | `InteractionAction` | Starts a conversation. |
