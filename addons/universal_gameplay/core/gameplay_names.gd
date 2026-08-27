@@ -129,6 +129,9 @@ const EVENT_MISSION_COMPLETED: StringName = &"mission_completed"
 const EVENT_MISSION_FAILED: StringName = &"mission_failed"
 const EVENT_OBJECTIVE_COMPLETED: StringName = &"objective_completed"
 const EVENT_ATTITUDE_CHANGED: StringName = &"attitude_changed"
+const EVENT_ITEM_PURCHASED: StringName = &"item_purchased"
+const EVENT_ITEM_SOLD: StringName = &"item_sold"
+const EVENT_LOOT_GENERATED: StringName = &"loot_generated"
 
 # --- AI activity names ---------------------------------------------------
 #
@@ -168,6 +171,7 @@ const SERVICE_OBJECTIVE: StringName = &"service.objective"
 const SERVICE_INPUT: StringName = &"service.input"
 const SERVICE_NARRATIVE: StringName = &"service.narrative"
 const SERVICE_FACTION: StringName = &"service.faction"
+const SERVICE_COMMERCE: StringName = &"service.commerce"
 
 # --- Core module identifiers ---------------------------------------------
 # Feature modules declare these in their manifest. Core is not listed: it is
@@ -193,6 +197,7 @@ const MODULE_NARRATIVE: StringName = &"module.narrative"
 const MODULE_MISSIONS: StringName = &"module.missions"
 const MODULE_FACTIONS: StringName = &"module.factions"
 const MODULE_COMMERCE: StringName = &"module.commerce"
+const MODULE_LOOT: StringName = &"module.loot"
 const MODULE_CRAFTING: StringName = &"module.crafting"
 const MODULE_SURVIVAL: StringName = &"module.survival"
 const MODULE_VEHICLES: StringName = &"module.vehicles"
